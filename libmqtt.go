@@ -5,7 +5,7 @@ type QosLevel = byte
 type ProtocolLevel = byte
 
 const (
-	V31  ProtocolLevel = iota + 3
+	V31 ProtocolLevel = iota + 3
 	V311
 )
 

@@ -7,7 +7,7 @@ const (
 type CtrlType = byte
 
 const (
-	CtrlConn      CtrlType = iota + 1
+	CtrlConn CtrlType = iota + 1
 	CtrlConnAck
 	CtrlPublish
 	CtrlPubAck

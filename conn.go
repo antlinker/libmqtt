@@ -123,7 +123,7 @@ func (c *ConnPacket) payload() *bytes.Buffer {
 type ConnAckCode = byte
 
 const (
-	ConnAccepted          ConnAckCode = iota
+	ConnAccepted ConnAckCode = iota
 	ConnBadProtocol
 	ConnIdRejected
 	ConnServerUnavailable

@@ -25,7 +25,7 @@ func (s *SubscribePacket) Bytes(buffer *bytes.Buffer) (err error) {
 	}
 
 	// fixed header
-	buffer.WriteByte((CtrlSubscribe << 4 ) | 0x02)
+	buffer.WriteByte((CtrlSubscribe << 4) | 0x02)
 	payload := s.payload()
 	// remaining length
 	encodeRemainLength(2+payload.Len(), buffer)
@@ -59,7 +59,7 @@ const (
 	SubOkMaxQos0 = iota
 	SubOkMaxQos1
 	SubOkMaxQos2
-	SubFail      = 0x80
+	SubFail = 0x80
 )
 
 // SubAckPacket is sent by the Server to the Client
