@@ -4,7 +4,7 @@ import (
 	"io"
 )
 
-func (d *decoder) decodeRemainLength(buffer io.ByteReader) (result int, err error) {
+func decodeRemainLength(buffer io.ByteReader) (result int, err error) {
 	m := 1
 	var encodedByte byte
 	for (encodedByte & 128) != 0 {
