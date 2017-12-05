@@ -13,14 +13,7 @@ func WithTLS() Option {
 	return nil
 }
 
-type Client interface {
-}
-
-type client struct {
-	username string
-	password string
-}
-
+// NewClient will create a new mqtt client
 func NewClient(options ...Option) Client {
 	c := &client{}
 	for _, o := range options {
@@ -30,14 +23,22 @@ func NewClient(options ...Option) Client {
 	return c
 }
 
+type Client interface {
+}
+
+type client struct {
+	username string
+	password string
+}
+
 func (c *client) Connect() {
 
 }
 
-func (c *client) Publish(payload []byte) {
+func (c *client) Publish(topic []Topic, payload []byte) {
 
 }
 
-func (c *client) Subscribe() <-chan Packet {
+func (c *client) Subscribe(topics []Topic) <-chan Packet {
 	return nil
 }

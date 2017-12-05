@@ -4,15 +4,17 @@ import (
 	"bytes"
 )
 
-// SubscribePacket is sent from the Client to the Server to create one or more Subscriptions.
-// Each Subscription registers a Client’s interest in one or more Topics.
+// SubscribePacket is sent from the Client to the Server
+// to create one or more Subscriptions.
+//
+// Each Subscription registers a Client’s interest in one or more TopicNames.
 // The Server sends PublishPackets to the Client in order to forward
-// Application Messages that were published to Topics that match these Subscriptions.
+// Application Messages that were published to TopicNames that match these Subscriptions.
 // The SubscribePacket also specifies (for each Subscription)
 // the maximum QoS with which the Server can send Application Messages to the Client
 type SubscribePacket struct {
-	PackageId uint16
-	Topics    []Topic
+	PacketId uint16
+	Topics   []*Topic
 }
 
 func (s *SubscribePacket) Type() CtrlType {
@@ -30,8 +32,8 @@ func (s *SubscribePacket) Bytes(buffer *bytes.Buffer) (err error) {
 	// remaining length
 	encodeRemainLength(2+payload.Len(), buffer)
 	// packet id
-	buffer.WriteByte(byte(s.PackageId >> 8))
-	buffer.WriteByte(byte(s.PackageId))
+	buffer.WriteByte(byte(s.PacketId >> 8))
+	buffer.WriteByte(byte(s.PacketId))
 
 	_, err = payload.WriteTo(buffer)
 
@@ -108,8 +110,8 @@ func (s *SubAckPacket) payload() (result *bytes.Buffer) {
 // UnSubPacket is sent by the Client to the Server,
 // to unsubscribe from topics.
 type UnSubPacket struct {
-	PacketId uint16
-	Topics   []Topic
+	PacketId   uint16
+	TopicNames []string
 }
 
 func (s *UnSubPacket) Type() CtrlType {
@@ -137,12 +139,9 @@ func (s *UnSubPacket) Bytes(buffer *bytes.Buffer) (err error) {
 
 func (s *UnSubPacket) payload() (result *bytes.Buffer) {
 	result = &bytes.Buffer{}
-	if s.Topics != nil {
-		for _, t := range s.Topics {
-			lenTopicName := len(t.Name)
-			result.WriteByte(byte(lenTopicName >> 8))
-			result.WriteByte(byte(lenTopicName))
-			result.Write([]byte(t.Name))
+	if s.TopicNames != nil {
+		for _, t := range s.TopicNames {
+			encodeDataWithLen([]byte(t), result)
 		}
 	}
 

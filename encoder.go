@@ -4,6 +4,13 @@ import (
 	"bytes"
 )
 
+func encodeDataWithLen(data []byte, buffer *bytes.Buffer) {
+	lenStr := len(data)
+	buffer.WriteByte(byte(lenStr >> 8))
+	buffer.WriteByte(byte(lenStr))
+	buffer.Write(data)
+}
+
 func encodeRemainLength(length int, buffer *bytes.Buffer) {
 	if length <= 0 || length > maxMsgSize {
 		return

@@ -3,19 +3,18 @@ package libmqtt
 import "bytes"
 
 type ConnPacket struct {
-	username string
-	password string
-	proto    ProtocolLevel
-
+	ProtoName    string
+	ProtoLevel   ProtocolLevel
+	Username     string
+	Password     string
 	ClientId     string
 	CleanSession bool
 	IsWill       bool
 	WillQos      QosLevel
 	WillRetain   bool
 	Keepalive    uint16
-
-	WillTopic   string
-	WillMessage string
+	WillTopic    string
+	WillMessage  string
 }
 
 func (c *ConnPacket) Type() CtrlType {
@@ -38,7 +37,7 @@ func (c *ConnPacket) Bytes(buffer *bytes.Buffer) (err error) {
 	// 0x00 0x04 'M' 'Q' 'T' 'T' 0x04
 	buffer.Write([]byte{0x00, 0x04})
 	buffer.Write(MQTT)
-	buffer.WriteByte(c.proto)
+	buffer.WriteByte(c.ProtoLevel)
 
 	// connect flags
 	buffer.WriteByte(c.connectFlags())
@@ -71,11 +70,11 @@ func (c *ConnPacket) connectFlags() byte {
 		}
 	}
 
-	if c.password != "" {
+	if c.Password != "" {
 		connectFlag |= 0x40
 	}
 
-	if c.username != "" {
+	if c.Username != "" {
 		connectFlag |= 0x80
 	}
 
@@ -85,36 +84,20 @@ func (c *ConnPacket) connectFlags() byte {
 func (c *ConnPacket) payload() *bytes.Buffer {
 	result := &bytes.Buffer{}
 	// client id
-	lenClientId := len(c.ClientId)
-	result.WriteByte(byte(lenClientId >> 8))
-	result.WriteByte(byte(lenClientId))
-	result.Write([]byte(c.ClientId))
+	encodeDataWithLen([]byte(c.ClientId), result)
 
 	// will topic and message
 	if c.IsWill {
-		lenWillTopic := len(c.WillTopic)
-		result.WriteByte(byte(lenWillTopic >> 8))
-		result.WriteByte(byte(lenWillTopic))
-		result.Write([]byte(c.WillTopic))
-
-		lenWillMsg := len(c.WillMessage)
-		result.WriteByte(byte(lenWillMsg >> 8))
-		result.WriteByte(byte(lenWillMsg))
-		result.Write([]byte(c.WillMessage))
+		encodeDataWithLen([]byte(c.WillTopic), result)
+		encodeDataWithLen([]byte(c.WillMessage), result)
 	}
 
-	if c.username != "" {
-		lenUsername := len(c.username)
-		result.WriteByte(byte(lenUsername >> 8))
-		result.WriteByte(byte(lenUsername))
-		result.Write([]byte(c.username))
+	if c.Username != "" {
+		encodeDataWithLen([]byte(c.Username), result)
 	}
 
-	if c.password != "" {
-		lenPassword := len(c.password)
-		result.WriteByte(byte(lenPassword >> 8))
-		result.WriteByte(byte(lenPassword))
-		result.Write([]byte(c.password))
+	if c.Password != "" {
+		encodeDataWithLen([]byte(c.Password), result)
 	}
 
 	return result
@@ -131,6 +114,10 @@ const (
 	ConnAuthFail
 )
 
+// ConnAckPacket is the packet sent by the Server in response to a ConnPacket
+// received from a Client.
+//
+// The first packet sent from the Server to the Client MUST be a ConnAckPacket
 type ConnAckPacket struct {
 	Present bool
 	Code    ConnAckCode

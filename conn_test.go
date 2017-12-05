@@ -7,9 +7,9 @@ import (
 
 var (
 	connWillPkg = &ConnPacket{
-		username: "user",
-		password: "pass",
-		proto:    V311,
+		Username:   "user",
+		Password:   "pass",
+		ProtoLevel: V311,
 
 		ClientId:     "1",
 		CleanSession: true,
@@ -21,9 +21,9 @@ var (
 		Keepalive:    10,
 	}
 	connPkg = &ConnPacket{
-		username: "user",
-		password: "pass",
-		proto:    V311,
+		Username:   "user",
+		Password:   "pass",
+		ProtoLevel: V311,
 
 		ClientId:     "1",
 		CleanSession: true,
@@ -40,8 +40,8 @@ var (
 		0, 1, 49, // client id: "1"
 		0, 4, 108, 111, 115, 116, // will topic: "lost"
 		0, 5, 112, 101, 97, 99, 101, // will msg: "peace"
-		0, 4, 117, 115, 101, 114, // username: "user"
-		0, 4, 112, 97, 115, 115, // password: "pass"
+		0, 4, 117, 115, 101, 114, // Username: "user"
+		0, 4, 112, 97, 115, 115, // Password: "pass"
 	}
 	connBytes = []byte{
 		0x10,                 // fixed header: conn:0
@@ -51,8 +51,8 @@ var (
 		0xC2,  // connect flags: 11000010
 		0, 10, // keepalive: 10s
 		0, 1, 49, // client id: "1"
-		0, 4, 117, 115, 101, 114, // username: "user"
-		0, 4, 112, 97, 115, 115, // password: "pass"
+		0, 4, 117, 115, 101, 114, // Username: "user"
+		0, 4, 112, 97, 115, 115, // Password: "pass"
 	}
 )
 

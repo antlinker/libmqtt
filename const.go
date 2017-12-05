@@ -22,5 +22,3 @@ const (
 	CtrlPingResp
 	CtrlDisConn
 )
-
-type CtrlFlag uint8
