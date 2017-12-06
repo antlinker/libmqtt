@@ -103,17 +103,6 @@ func (c *ConnPacket) payload() *bytes.Buffer {
 	return result
 }
 
-type ConnAckCode = byte
-
-const (
-	ConnAccepted ConnAckCode = iota
-	ConnBadProtocol
-	ConnIdRejected
-	ConnServerUnavailable
-	ConnBadIdentity
-	ConnAuthFail
-)
-
 // ConnAckPacket is the packet sent by the Server in response to a ConnPacket
 // received from a Client.
 //

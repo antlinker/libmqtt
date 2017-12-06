@@ -2,6 +2,8 @@ package libmqtt
 
 import "bytes"
 
+// PublishPacket is sent from a Client to a Server or from Server to a Client
+// to transport an Application Message.
 type PublishPacket struct {
 	IsDup     bool
 	Qos       QosLevel

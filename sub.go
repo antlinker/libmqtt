@@ -4,6 +4,8 @@ import (
 	"bytes"
 )
 
+type Subscriber func(topic string, qos QosLevel, msg []byte)
+
 // SubscribePacket is sent from the Client to the Server
 // to create one or more Subscriptions.
 //
@@ -54,15 +56,6 @@ func (s *SubscribePacket) payload() (result *bytes.Buffer) {
 
 	return
 }
-
-type SubAckCode = byte
-
-const (
-	SubOkMaxQos0 = iota
-	SubOkMaxQos1
-	SubOkMaxQos2
-	SubFail = 0x80
-)
 
 // SubAckPacket is sent by the Server to the Client
 // to confirm receipt and processing of a SubscribePacket.

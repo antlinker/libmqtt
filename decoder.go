@@ -2,7 +2,12 @@ package libmqtt
 
 import (
 	"bufio"
+	"errors"
 	"io"
+)
+
+var (
+	ErrInvalidPacket = errors.New("read invalid packet ")
 )
 
 func decodeOnePacket(reader *bufio.Reader) (pkt Packet, err error) {
@@ -19,7 +24,10 @@ func decodeOnePacket(reader *bufio.Reader) (pkt Packet, err error) {
 	}
 
 	body := make([]byte, bytesToRead)
-	_, err = io.ReadFull(reader, body)
+	n, err := io.ReadFull(reader, body[:])
+	if n < 2 {
+		err = ErrInvalidPacket
+	}
 	if err != nil {
 		return
 	}
@@ -27,6 +35,10 @@ func decodeOnePacket(reader *bufio.Reader) (pkt Packet, err error) {
 	switch header >> 4 {
 	case CtrlConn:
 		protocol, next := decodeString(body)
+		if len(next) < 2 {
+			err = ErrInvalidPacket
+			return
+		}
 		hasUsername := next[1]&0x80>>7 == 1
 		hasPassword := next[1]&0x40>>6 == 1
 		tmpPkt := &ConnPacket{
@@ -51,12 +63,20 @@ func decodeOnePacket(reader *bufio.Reader) (pkt Packet, err error) {
 		}
 		pkt = tmpPkt
 	case CtrlConnAck:
+		if len(body) < 2 {
+			err = ErrInvalidPacket
+			return
+		}
 		pkt = &ConnAckPacket{
 			Present: body[0]&0x01 == 1,
 			Code:    body[1],
 		}
 	case CtrlPublish:
 		topicName, next := decodeString(body)
+		if len(next) < 2 {
+			err = ErrInvalidPacket
+			return
+		}
 		tmpPkg := &PublishPacket{
 			IsDup:     header&0x08>>3 == 1,
 			Qos:       header & 0x06 >> 1,
@@ -137,6 +157,9 @@ func decodeOnePacket(reader *bufio.Reader) (pkt Packet, err error) {
 }
 
 func decodeString(data []byte) (string, []byte) {
+	if len(data) < 2 {
+		return "", data
+	}
 	length := int(data[0])<<8 + int(data[1])
 	return string(data[2 : 2+length]), data[2+length:]
 }
@@ -144,11 +167,14 @@ func decodeString(data []byte) (string, []byte) {
 func decodeRemainLength(reader io.ByteReader) (result int, err error) {
 	m := 1
 	var encodedByte byte
-	for (encodedByte & 128) != 0 {
+	encodedByte, err = reader.ReadByte()
+	result = int(encodedByte & 127)
+	for (encodedByte & 0x80) != 0 {
 		encodedByte, err = reader.ReadByte()
 		if err != nil {
 			return
 		}
+
 		result += int(encodedByte&127) * m
 		m <<= 8
 

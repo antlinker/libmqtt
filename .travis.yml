@@ -4,5 +4,4 @@ go:
   - 1.9.x
 
 script:
-  - go test
-  - go test -run=. -bench=. -benchmem
+  - make test

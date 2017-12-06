@@ -68,7 +68,6 @@ func TestConnPacket(t *testing.T) {
 	buffer := &bytes.Buffer{}
 	connWillPkg.Bytes(buffer)
 	testConnWillBytes := buffer.Bytes()
-	t.Log(testConnWillBytes)
 	if bytes.Compare(testConnWillBytes, connWillBytes) != 0 {
 		t.Fail()
 	}
