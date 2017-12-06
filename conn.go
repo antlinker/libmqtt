@@ -2,9 +2,10 @@ package libmqtt
 
 import "bytes"
 
+// ConnPacket is the first packet sent by Client to Server
 type ConnPacket struct {
-	ProtoName    string
-	ProtoLevel   ProtocolLevel
+	protoName    string
+	protoLevel   ProtocolLevel
 	Username     string
 	Password     string
 	ClientId     string
@@ -14,7 +15,7 @@ type ConnPacket struct {
 	WillRetain   bool
 	Keepalive    uint16
 	WillTopic    string
-	WillMessage  string
+	WillMessage  []byte
 }
 
 func (c *ConnPacket) Type() CtrlType {
@@ -36,11 +37,11 @@ func (c *ConnPacket) Bytes(buffer *bytes.Buffer) (err error) {
 	// Protocol Name and level
 	// 0x00 0x04 'M' 'Q' 'T' 'T' 0x04
 	buffer.Write([]byte{0x00, 0x04})
-	buffer.Write(MQTT)
-	buffer.WriteByte(c.ProtoLevel)
+	buffer.Write(mqtt)
+	buffer.WriteByte(V311)
 
 	// connect flags
-	buffer.WriteByte(c.connectFlags())
+	buffer.WriteByte(c.flags())
 
 	// keepalive
 	buffer.WriteByte(byte(c.Keepalive >> 8))
@@ -51,7 +52,7 @@ func (c *ConnPacket) Bytes(buffer *bytes.Buffer) (err error) {
 	return
 }
 
-func (c *ConnPacket) connectFlags() byte {
+func (c *ConnPacket) flags() byte {
 	var connectFlag byte = 0
 	if c.ClientId == "" {
 		c.CleanSession = true

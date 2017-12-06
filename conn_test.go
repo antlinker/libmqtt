@@ -9,7 +9,7 @@ var (
 	connWillPkg = &ConnPacket{
 		Username:   "user",
 		Password:   "pass",
-		ProtoLevel: V311,
+		protoLevel: V311,
 
 		ClientId:     "1",
 		CleanSession: true,
@@ -17,42 +17,41 @@ var (
 		WillQos:      Qos2,
 		WillRetain:   true,
 		WillTopic:    "lost",
-		WillMessage:  "peace",
+		WillMessage:  []byte("peace"),
 		Keepalive:    10,
 	}
 	connPkg = &ConnPacket{
 		Username:   "user",
 		Password:   "pass",
-		ProtoLevel: V311,
+		protoLevel: V311,
 
 		ClientId:     "1",
 		CleanSession: true,
 		Keepalive:    10,
 	}
-
 	connWillBytes = []byte{
-		0x10,                 // fixed header: conn:0
-		38,                   // remaining length: 38
-		0, 4, 77, 81, 84, 84, // Protocol Name: "MQTT"
-		4,     // Protocol Level 3.1.1
-		0xF6,  // connect flags: 11110110
-		0, 10, // keepalive: 10s
-		0, 1, 49, // client id: "1"
-		0, 4, 108, 111, 115, 116, // will topic: "lost"
+		0x10,                        // fixed header: conn:0
+		38,                          // remaining length: 38
+		0, 4, 77, 81, 84, 84,        // Protocol Name: "MQTT"
+		4,                           // Protocol Level 3.1.1
+		0xF6,                        // connect flags: 11110110
+		0, 10,                       // keepalive: 10s
+		0, 1, 49,                    // client id: "1"
+		0, 4, 108, 111, 115, 116,    // will topic: "lost"
 		0, 5, 112, 101, 97, 99, 101, // will msg: "peace"
-		0, 4, 117, 115, 101, 114, // Username: "user"
-		0, 4, 112, 97, 115, 115, // Password: "pass"
+		0, 4, 117, 115, 101, 114,    // Username: "user"
+		0, 4, 112, 97, 115, 115,     // Password: "pass"
 	}
 	connBytes = []byte{
-		0x10,                 // fixed header: conn:0
-		25,                   // remaining length: 38
-		0, 4, 77, 81, 84, 84, // Protocol Name: "MQTT"
-		4,     // Protocol Level 3.1.1
-		0xC2,  // connect flags: 11000010
-		0, 10, // keepalive: 10s
-		0, 1, 49, // client id: "1"
+		0x10,                     // fixed header: conn:0
+		25,                       // remaining length: 38
+		0, 4, 77, 81, 84, 84,     // Protocol Name: "MQTT"
+		4,                        // Protocol Level 3.1.1
+		0xC2,                     // connect flags: 11000010
+		0, 10,                    // keepalive: 10s
+		0, 1, 49,                 // client id: "1"
 		0, 4, 117, 115, 101, 114, // Username: "user"
-		0, 4, 112, 97, 115, 115, // Password: "pass"
+		0, 4, 112, 97, 115, 115,  // Password: "pass"
 	}
 )
 
@@ -69,6 +68,7 @@ func TestConnPacket(t *testing.T) {
 	connWillPkg.Bytes(buffer)
 	testConnWillBytes := buffer.Bytes()
 	if bytes.Compare(testConnWillBytes, connWillBytes) != 0 {
+		t.Log(testConnWillBytes)
 		t.Fail()
 	}
 
@@ -76,6 +76,7 @@ func TestConnPacket(t *testing.T) {
 	connPkg.Bytes(buffer)
 	testConnBytes := buffer.Bytes()
 	if bytes.Compare(testConnBytes, connBytes) != 0 {
+		t.Log(testConnBytes)
 		t.Fail()
 	}
 }
@@ -104,8 +105,7 @@ func TestDisConnAckPacket(t *testing.T) {
 }
 
 var (
-	disConnPkg   = &DisConnPacket{}
-	disConnBytes = []byte{0xE0, 0x00}
+	disConnPkg = &DisConnPacket{}
 )
 
 func BenchmarkDisConnPacket_Bytes(b *testing.B) {

@@ -40,7 +40,7 @@ func (s *PingRespPacket) Bytes(buffer *bytes.Buffer) (err error) {
 	if buffer == nil || s == nil {
 		return
 	}
-	// fixed header
-	buffer.WriteByte(CtrlPingResp << 4)
-	return buffer.WriteByte(0x00)
+
+	_, err = buffer.Write(pingRespBytes)
+	return
 }

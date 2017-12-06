@@ -1,7 +1,6 @@
 package libmqtt
 
 import (
-	"bufio"
 	"errors"
 	"io"
 )
@@ -10,13 +9,12 @@ var (
 	ErrInvalidPacket = errors.New("read invalid packet ")
 )
 
-func decodeOnePacket(reader *bufio.Reader) (pkt Packet, err error) {
-	var header byte
-	header, err = reader.ReadByte()
+func decodeOnePacket(reader io.Reader) (pkt Packet, err error) {
+	headerBytes := make([]byte, 1)
+	_, err = io.ReadFull(reader, headerBytes[:])
 	if err != nil {
 		return
 	}
-
 	var bytesToRead int
 	bytesToRead, err = decodeRemainLength(reader)
 	if err != nil {
@@ -32,6 +30,7 @@ func decodeOnePacket(reader *bufio.Reader) (pkt Packet, err error) {
 		return
 	}
 
+	header := headerBytes[0]
 	switch header >> 4 {
 	case CtrlConn:
 		protocol, next := decodeString(body)
@@ -42,8 +41,8 @@ func decodeOnePacket(reader *bufio.Reader) (pkt Packet, err error) {
 		hasUsername := next[1]&0x80>>7 == 1
 		hasPassword := next[1]&0x40>>6 == 1
 		tmpPkt := &ConnPacket{
-			ProtoName:    protocol,
-			ProtoLevel:   next[0],
+			protoName:    protocol,
+			protoLevel:   next[0],
 			CleanSession: next[1]&0x02>>1 == 1,
 			IsWill:       next[1]&0x04>>2 == 1,
 			WillQos:      next[1] & 0x18 >> 3,
@@ -53,7 +52,7 @@ func decodeOnePacket(reader *bufio.Reader) (pkt Packet, err error) {
 		tmpPkt.ClientId, next = decodeString(next[4:])
 		if tmpPkt.IsWill {
 			tmpPkt.WillTopic, next = decodeString(next)
-			tmpPkt.WillMessage, next = decodeString(next)
+			tmpPkt.WillMessage, next = decodeData(next)
 		}
 		if hasUsername {
 			tmpPkt.Username, next = decodeString(next)
@@ -161,21 +160,29 @@ func decodeString(data []byte) (string, []byte) {
 		return "", data
 	}
 	length := int(data[0])<<8 + int(data[1])
-	return string(data[2 : 2+length]), data[2+length:]
+	return string(data[2: 2+length]), data[2+length:]
 }
 
-func decodeRemainLength(reader io.ByteReader) (result int, err error) {
+func decodeData(data []byte) ([]byte, []byte) {
+	if len(data) < 2 {
+		return nil, data
+	}
+	length := int(data[0])<<8 + int(data[1])
+	return data[2: 2+length], data[2+length:]
+}
+
+func decodeRemainLength(reader io.Reader) (result int, err error) {
 	m := 1
-	var encodedByte byte
-	encodedByte, err = reader.ReadByte()
-	result = int(encodedByte & 127)
-	for (encodedByte & 0x80) != 0 {
-		encodedByte, err = reader.ReadByte()
+	buf := make([]byte, 1)
+	_, err = io.ReadFull(reader, buf[:])
+	result = int(buf[0] & 127)
+	for (buf[0] & 0x80) != 0 {
+		_, err = io.ReadFull(reader, buf[:])
 		if err != nil {
 			return
 		}
 
-		result += int(encodedByte&127) * m
+		result += int(buf[0]&127) * m
 		m <<= 8
 
 		if m > 128*128*128 {

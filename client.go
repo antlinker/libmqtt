@@ -7,6 +7,7 @@ import (
 	"net"
 	"sync"
 	"time"
+	"bytes"
 )
 
 // BackoffConfig defines the parameters for the reconnecting backoff strategy.
@@ -26,6 +27,12 @@ type BackoffConfig struct {
 
 // Option is client option for connection options
 type Option func(*client)
+
+func WithCleanSession() Option {
+	return func(c *client) {
+		c.options.cleanSession = true
+	}
+}
 
 // WithIdentity for username and password
 func WithIdentity(username, password string) Option {
@@ -79,17 +86,27 @@ func WithServer(servers ...string) Option {
 }
 
 // WithTLS for ssl certification
-func WithTLS(certFile, serverName string) Option {
+func WithTLS(certFile, keyFile string, caCert string, serverNameOverride string, skipVerify bool) Option {
 	return func(c *client) {
-		b, err := ioutil.ReadFile(certFile)
+		b, err := ioutil.ReadFile(caCert)
 		if err != nil {
-			panic("couldn't read cert file ")
+			panic("load ca cert file failed ")
 		}
 		cp := x509.NewCertPool()
 		if !cp.AppendCertsFromPEM(b) {
-			panic("credentials: failed to append certificates ")
+			panic("append certificates failed ")
 		}
-		c.options.tlsConfig = &tls.Config{ServerName: serverName, RootCAs: cp}
+		cert, err := tls.LoadX509KeyPair(certFile, keyFile)
+		if err != nil {
+			panic("load client cert file failed ")
+		}
+
+		c.options.tlsConfig = &tls.Config{
+			Certificates:       []tls.Certificate{cert},
+			InsecureSkipVerify: skipVerify,
+			ClientCAs:          cp,
+			ServerName:         serverNameOverride,
+		}
 	}
 }
 
@@ -110,33 +127,36 @@ func NewClient(options ...Option) Client {
 }
 
 type clientOptions struct {
-	servers     []string      // server address strings
-	dialTimeout time.Duration // dial timeout in second
-	clientId    string        // used by ConnPacket
-	username    string        // used by ConnPacket
-	password    string        // used by ConnPacket
-	keepalive   uint16        // used by ConnPacket
-	isWill      bool          // used by ConnPacket
-	willTopic   string        // used by ConnPacket
-	willPayload []byte        // used by ConnPacket
-	willQos     byte          // used by ConnPacket
-	willRetain  bool          // used by ConnPacket
-	tlsConfig   *tls.Config
-	bf          *BackoffConfig
+	servers      []string      // server address strings
+	dialTimeout  time.Duration // dial timeout in second
+	clientId     string        // used by ConnPacket
+	username     string        // used by ConnPacket
+	password     string        // used by ConnPacket
+	keepalive    uint16        // used by ConnPacket
+	cleanSession bool          // used by ConnPacket
+	isWill       bool          // used by ConnPacket
+	willTopic    string        // used by ConnPacket
+	willPayload  []byte        // used by ConnPacket
+	willQos      byte          // used by ConnPacket
+	willRetain   bool          // used by ConnPacket
+	tlsConfig    *tls.Config
+	bf           *BackoffConfig
 }
 
 // Client act as a mqtt client
 type Client interface {
-	Connect()
+	Connect(errHandler ConnHandler)
 	Publish(topic string, qos QosLevel, isRetain bool, payload []byte)
+	Wait()
 }
 
 type client struct {
 	options     clientOptions
-	sub         chan *PublishPacket // sub channel
-	pub         chan Packet         // pub channel
-	subscribers *sync.Map           // topic -> []subscriber
-	serverConn  *sync.Map           // server connections
+	sub         chan PublishPacket // sub channel
+	pub         chan PublishPacket // pub channel
+	subscribers *sync.Map          // topic -> []subscriber
+	serverConn  *sync.Map          // server connections
+	workers     *sync.WaitGroup    // mqtt logic processor
 }
 
 func defaultClient() *client {
@@ -150,17 +170,21 @@ func defaultClient() *client {
 			dialTimeout: 20 * time.Second,
 			keepalive:   120, // default keepalive interval is 2min
 		},
-		pub:         make(chan Packet, 256),
-		sub:         make(chan *PublishPacket, 256),
+		pub:         make(chan PublishPacket, 256),
+		sub:         make(chan PublishPacket, 256),
 		subscribers: &sync.Map{},
 		serverConn:  &sync.Map{},
+		workers:     &sync.WaitGroup{},
 	}
 }
 
+type ConnHandler func(server string, code ConnAckCode)
+
 // Connect to all specified server with client options
-func (c *client) Connect() {
+func (c *client) Connect(errHandler ConnHandler) {
 	for _, s := range c.options.servers {
-		c.connect(s)
+		c.workers.Add(1)
+		go c.connect(s, errHandler)
 	}
 }
 
@@ -170,7 +194,7 @@ func (c *client) Publish(topic string, qos QosLevel, isRetain bool, payload []by
 		qos = Qos2
 	}
 
-	c.pub <- &PublishPacket{
+	c.pub <- PublishPacket{
 		Qos:       qos,
 		IsRetain:  isRetain,
 		TopicName: topic,
@@ -200,36 +224,76 @@ func (c *client) UnSubscribe(topics ...string) {
 	}
 }
 
-func (c *client) connect(server string) (err error) {
-	var conn net.Conn
+func (c *client) connect(server string, errHandler ConnHandler) {
+	defer c.workers.Done()
 
-	if c.options.tlsConfig == nil {
-		// connection without tls
-		conn, err = net.DialTimeout("tcp", server, c.options.dialTimeout)
-		if err != nil {
-			return
-		}
-	} else {
+	var conn net.Conn
+	var err error
+
+	if c.options.tlsConfig != nil {
 		// connection with tls
 		conn, err = tls.DialWithDialer(&net.Dialer{Timeout: c.options.dialTimeout}, "tcp", server, c.options.tlsConfig)
 		if err != nil {
+			errHandler(server, ConnDialErr)
+			return
+		}
+	} else {
+		// connection without tls
+		conn, err = net.DialTimeout("tcp", server, c.options.dialTimeout)
+		if err != nil {
+			errHandler(server, ConnDialErr)
 			return
 		}
 	}
 
-	c.storeConn(server, conn)
-	return
-}
+	buf := &bytes.Buffer{}
 
-func (c *client) storeConn(server string, conn net.Conn) {
-	c.removeConn(server)
-	c.serverConn.Store(server, conn)
-}
-
-func (c *client) removeConn(server string) {
-	if v, ok := c.serverConn.Load(server); ok {
-		conn := v.(net.Conn)
-		conn.Close()
-		c.serverConn.Delete(server)
+	// send conn packet
+	connPkt := &ConnPacket{
+		Username:     c.options.username,
+		Password:     c.options.password,
+		ClientId:     c.options.clientId,
+		CleanSession: c.options.cleanSession,
+		IsWill:       c.options.isWill,
+		WillQos:      c.options.willQos,
+		WillTopic:    c.options.willTopic,
+		WillMessage:  c.options.willPayload,
+		WillRetain:   c.options.willRetain,
+		Keepalive:    c.options.keepalive,
 	}
+	connPkt.Bytes(buf)
+	_, err = buf.WriteTo(conn)
+	buf.Reset()
+	if err != nil {
+		errHandler(server, ConnNetErr)
+		return
+	}
+
+	// receive ConnAck
+	pkt, err := decodeOnePacket(conn)
+	if err != nil {
+		errHandler(server, ConnBadPacket)
+		return
+	}
+
+	if pkt.Type() == CtrlConnAck {
+		p := pkt.(*ConnAckPacket)
+		if p.Code != ConnAccepted {
+			errHandler(server, p.Code)
+			return
+		}
+	} else {
+		errHandler(server, ConnBadPacket)
+		return
+	}
+
+	c.startLogic(conn, buf)
+}
+
+func (c *client) startLogic(conn net.Conn, buffer *bytes.Buffer) {
+
+}
+
+func (c *client) Wait() {
+	c.workers.Wait()
 }

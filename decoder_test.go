@@ -39,6 +39,7 @@ func TestDecodeOnePacket(t *testing.T) {
 		pkt.Bytes(buffer)
 		pktBytes := buffer.Bytes()
 		if bytes.Compare(pktBytes, targetBytes) != 0 {
+			t.Log(pktBytes)
 			t.Fail()
 		}
 	default:

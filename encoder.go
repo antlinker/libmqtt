@@ -1,8 +1,6 @@
 package libmqtt
 
-import (
-	"bytes"
-)
+import "bytes"
 
 func encodeDataWithLen(data []byte, buffer *bytes.Buffer) {
 	lenStr := len(data)

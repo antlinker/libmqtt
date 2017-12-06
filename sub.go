@@ -1,8 +1,6 @@
 package libmqtt
 
-import (
-	"bytes"
-)
+import "bytes"
 
 type Subscriber func(topic string, qos QosLevel, msg []byte)
 
@@ -53,7 +51,6 @@ func (s *SubscribePacket) payload() (result *bytes.Buffer) {
 			result.WriteByte(t.Qos)
 		}
 	}
-
 	return
 }
 
