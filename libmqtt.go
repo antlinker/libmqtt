@@ -21,7 +21,7 @@ const (
 type CtrlType = byte
 
 const (
-	CtrlConn      CtrlType = iota + 1
+	CtrlConn CtrlType = iota + 1
 	CtrlConnAck
 	CtrlPublish
 	CtrlPubAck
@@ -42,7 +42,7 @@ type QosLevel = byte
 type ProtocolLevel = byte
 
 const (
-	V31  ProtocolLevel = iota + 3
+	V31 ProtocolLevel = iota + 3
 	V311
 )
 
@@ -59,15 +59,15 @@ var (
 type ConnAckCode = byte
 
 const (
-	ConnAccepted          ConnAckCode = iota
+	ConnAccepted ConnAckCode = iota
 	ConnBadProtocol
 	ConnIdRejected
 	ConnServerUnavailable
 	ConnBadIdentity
 	ConnAuthFail
-	ConnNetErr            ConnAckCode = 0xf0
-	ConnBadPacket         ConnAckCode = 0xf1
-	ConnDialErr           ConnAckCode = 0xf2
+	ConnNetErr    ConnAckCode = 0xf0
+	ConnBadPacket ConnAckCode = 0xf1
+	ConnDialErr   ConnAckCode = 0xf2
 )
 
 type SubAckCode = byte
@@ -76,7 +76,7 @@ const (
 	SubOkMaxQos0 SubAckCode = iota
 	SubOkMaxQos1
 	SubOkMaxQos2
-	SubFail      = 0x80
+	SubFail = 0x80
 )
 
 var (

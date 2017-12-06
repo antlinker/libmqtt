@@ -1,13 +1,13 @@
 package libmqtt
 
 import (
+	"bytes"
 	"crypto/tls"
 	"crypto/x509"
 	"io/ioutil"
 	"net"
 	"sync"
 	"time"
-	"bytes"
 )
 
 // BackoffConfig defines the parameters for the reconnecting backoff strategy.

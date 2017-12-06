@@ -160,7 +160,7 @@ func decodeString(data []byte) (string, []byte) {
 		return "", data
 	}
 	length := int(data[0])<<8 + int(data[1])
-	return string(data[2: 2+length]), data[2+length:]
+	return string(data[2 : 2+length]), data[2+length:]
 }
 
 func decodeData(data []byte) ([]byte, []byte) {
@@ -168,7 +168,7 @@ func decodeData(data []byte) ([]byte, []byte) {
 		return nil, data
 	}
 	length := int(data[0])<<8 + int(data[1])
-	return data[2: 2+length], data[2+length:]
+	return data[2 : 2+length], data[2+length:]
 }
 
 func decodeRemainLength(reader io.Reader) (result int, err error) {
