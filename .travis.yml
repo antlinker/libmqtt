@@ -7,7 +7,7 @@ go:
 before_install:
   - sudo apt-get -qq update
   - sudo apt-get install -y curl lksctp-tools
-  - curl -fsSL http://emqtt.com/downloads/latest/ubuntu16_04-deb -o emqttd.deb
+  - curl -fsSL http://emqtt.com/downloads/latest/ubuntu14_04 -o emqttd.deb
   - sudo dpkg -i emqttd.deb
   - service emqttd start
 
