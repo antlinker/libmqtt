@@ -6,7 +6,7 @@ import (
 )
 
 var (
-	connWillPkg = &ConnPacket{
+	connWillPkg = &ConPacket{
 		Username:   "user",
 		Password:   "pass",
 		protoLevel: V311,
@@ -20,7 +20,7 @@ var (
 		WillMessage:  []byte("peace"),
 		Keepalive:    10,
 	}
-	connPkg = &ConnPacket{
+	connPkg = &ConPacket{
 		Username:   "user",
 		Password:   "pass",
 		protoLevel: V311,
@@ -82,7 +82,7 @@ func TestConnPacket(t *testing.T) {
 }
 
 var (
-	connAckPkg   = &ConnAckPacket{Present: true, Code: ConnAccepted}
+	connAckPkg   = &ConAckPacket{Present: true, Code: ConnAccepted}
 	connAckBytes = []byte{0x20, 0x02, 0x01, 0x00}
 )
 
@@ -105,7 +105,7 @@ func TestDisConnAckPacket(t *testing.T) {
 }
 
 var (
-	disConnPkg = &DisConnPacket{}
+	disConnPkg = &disConPacket{}
 )
 
 func BenchmarkDisConnPacket_Bytes(b *testing.B) {

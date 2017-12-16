@@ -2,8 +2,8 @@ package libmqtt
 
 import "bytes"
 
-// ConnPacket is the first packet sent by Client to Server
-type ConnPacket struct {
+// ConPacket is the first packet sent by Client to Server
+type ConPacket struct {
 	protoName    string
 	protoLevel   ProtocolLevel
 	Username     string
@@ -18,11 +18,11 @@ type ConnPacket struct {
 	WillMessage  []byte
 }
 
-func (c *ConnPacket) Type() CtrlType {
+func (c *ConPacket) Type() CtrlType {
 	return CtrlConn
 }
 
-func (c *ConnPacket) Bytes(buffer *bytes.Buffer) (err error) {
+func (c *ConPacket) Bytes(buffer *bytes.Buffer) (err error) {
 	if buffer == nil || c == nil {
 		return
 	}
@@ -52,7 +52,7 @@ func (c *ConnPacket) Bytes(buffer *bytes.Buffer) (err error) {
 	return
 }
 
-func (c *ConnPacket) flags() byte {
+func (c *ConPacket) flags() byte {
 	var connectFlag byte = 0
 	if c.ClientId == "" {
 		c.CleanSession = true
@@ -82,7 +82,7 @@ func (c *ConnPacket) flags() byte {
 	return connectFlag
 }
 
-func (c *ConnPacket) payload() *bytes.Buffer {
+func (c *ConPacket) payload() *bytes.Buffer {
 	result := &bytes.Buffer{}
 	// client id
 	encodeDataWithLen([]byte(c.ClientId), result)
@@ -104,20 +104,20 @@ func (c *ConnPacket) payload() *bytes.Buffer {
 	return result
 }
 
-// ConnAckPacket is the packet sent by the Server in response to a ConnPacket
+// ConAckPacket is the packet sent by the Server in response to a ConPacket
 // received from a Client.
 //
-// The first packet sent from the Server to the Client MUST be a ConnAckPacket
-type ConnAckPacket struct {
+// The first packet sent from the Server to the Client MUST be a ConAckPacket
+type ConAckPacket struct {
 	Present bool
-	Code    ConnAckCode
+	Code    ConAckCode
 }
 
-func (c *ConnAckPacket) Type() CtrlType {
+func (c *ConAckPacket) Type() CtrlType {
 	return CtrlConnAck
 }
 
-func (c *ConnAckPacket) Bytes(buffer *bytes.Buffer) (err error) {
+func (c *ConAckPacket) Bytes(buffer *bytes.Buffer) (err error) {
 	if buffer == nil || c == nil {
 		return
 	}
@@ -132,16 +132,20 @@ func (c *ConnAckPacket) Bytes(buffer *bytes.Buffer) (err error) {
 	return buffer.WriteByte(c.Code)
 }
 
-// DisConnPacket is the final Control Packet sent from the Client to the Server.
+// disConPacket is the final Control Packet sent from the Client to the Server.
 // It indicates that the Client is disconnecting cleanly.
-type DisConnPacket struct {
+var (
+	DisConPacket = &disConPacket{}
+)
+
+type disConPacket struct {
 }
 
-func (s *DisConnPacket) Type() CtrlType {
+func (s *disConPacket) Type() CtrlType {
 	return CtrlDisConn
 }
 
-func (s *DisConnPacket) Bytes(buffer *bytes.Buffer) (err error) {
+func (s *disConPacket) Bytes(buffer *bytes.Buffer) (err error) {
 	if buffer == nil || s == nil {
 		return
 	}

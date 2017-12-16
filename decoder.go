@@ -40,7 +40,7 @@ func decodeOnePacket(reader io.Reader) (pkt Packet, err error) {
 		}
 		hasUsername := next[1]&0x80>>7 == 1
 		hasPassword := next[1]&0x40>>6 == 1
-		tmpPkt := &ConnPacket{
+		tmpPkt := &ConPacket{
 			protoName:    protocol,
 			protoLevel:   next[0],
 			CleanSession: next[1]&0x02>>1 == 1,
@@ -66,7 +66,7 @@ func decodeOnePacket(reader io.Reader) (pkt Packet, err error) {
 			err = ErrInvalidPacket
 			return
 		}
-		pkt = &ConnAckPacket{
+		pkt = &ConAckPacket{
 			Present: body[0]&0x01 == 1,
 			Code:    body[1],
 		}
@@ -83,7 +83,7 @@ func decodeOnePacket(reader io.Reader) (pkt Packet, err error) {
 			TopicName: topicName,
 		}
 		if tmpPkg.Qos > Qos0 {
-			tmpPkg.PacketId = uint16(next[0])<<8 + uint16(next[1])
+			tmpPkg.packetId = uint16(next[0])<<8 + uint16(next[1])
 			next = next[2:]
 		}
 		tmpPkg.Payload = next[:]
@@ -146,11 +146,11 @@ func decodeOnePacket(reader io.Reader) (pkt Packet, err error) {
 			PacketId: uint16(body[0])<<8 + uint16(body[1]),
 		}
 	case CtrlPingReq:
-		pkt = &PingReqPacket{}
+		pkt = PingReqPacket
 	case CtrlPingResp:
-		pkt = &PingRespPacket{}
+		pkt = PingRespPacket
 	case CtrlDisConn:
-		pkt = &DisConnPacket{}
+		pkt = DisConPacket
 	}
 	return
 }
@@ -160,7 +160,7 @@ func decodeString(data []byte) (string, []byte) {
 		return "", data
 	}
 	length := int(data[0])<<8 + int(data[1])
-	return string(data[2 : 2+length]), data[2+length:]
+	return string(data[2: 2+length]), data[2+length:]
 }
 
 func decodeData(data []byte) ([]byte, []byte) {
@@ -168,7 +168,7 @@ func decodeData(data []byte) ([]byte, []byte) {
 		return nil, data
 	}
 	length := int(data[0])<<8 + int(data[1])
-	return data[2 : 2+length], data[2+length:]
+	return data[2: 2+length], data[2+length:]
 }
 
 func decodeRemainLength(reader io.Reader) (result int, err error) {

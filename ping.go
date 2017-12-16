@@ -2,7 +2,12 @@ package libmqtt
 
 import "bytes"
 
-// PingReqPacket is sent from a Client to the Server.
+var (
+	PingReqPacket  = &pingReqPacket{}
+	PingRespPacket = &pingRespPacket{}
+)
+
+// pingReqPacket is sent from a Client to the Server.
 //
 // It can be used to:
 // 		1. Indicate to the Server that the Client is alive in the absence of any other Control Packets being sent from the Client to the Server.
@@ -10,14 +15,14 @@ import "bytes"
 // 		3. Exercise the network to indicate that the Network Connection is active.
 //
 // This Packet is used in Keep Alive processing
-type PingReqPacket struct {
+type pingReqPacket struct {
 }
 
-func (s *PingReqPacket) Type() CtrlType {
+func (s *pingReqPacket) Type() CtrlType {
 	return CtrlUnSubAck
 }
 
-func (s *PingReqPacket) Bytes(buffer *bytes.Buffer) (err error) {
+func (s *pingReqPacket) Bytes(buffer *bytes.Buffer) (err error) {
 	if buffer == nil || s == nil {
 		return
 	}
@@ -27,16 +32,16 @@ func (s *PingReqPacket) Bytes(buffer *bytes.Buffer) (err error) {
 	return buffer.WriteByte(0x00)
 }
 
-// PingRespPacket is sent by the Server to the Client in response to
-// a PingReqPacket. It indicates that the Server is alive.
-type PingRespPacket struct {
+// pingRespPacket is sent by the Server to the Client in response to
+// a pingReqPacket. It indicates that the Server is alive.
+type pingRespPacket struct {
 }
 
-func (s *PingRespPacket) Type() CtrlType {
+func (s *pingRespPacket) Type() CtrlType {
 	return CtrlUnSubAck
 }
 
-func (s *PingRespPacket) Bytes(buffer *bytes.Buffer) (err error) {
+func (s *pingRespPacket) Bytes(buffer *bytes.Buffer) (err error) {
 	if buffer == nil || s == nil {
 		return
 	}

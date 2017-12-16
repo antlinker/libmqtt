@@ -9,6 +9,8 @@ type Packet interface {
 	Bytes(*bytes.Buffer) error
 }
 
+type TopicMsg PublishPacket
+
 type Topic struct {
 	Name string
 	Qos  QosLevel
@@ -56,19 +58,23 @@ var (
 	mqtt = []byte{'M', 'Q', 'T', 'T'}
 )
 
-type ConnAckCode = byte
+type ConAckCode = byte
 
 const (
-	ConnAccepted ConnAckCode = iota
+	ConnAccepted ConAckCode = iota
 	ConnBadProtocol
 	ConnIdRejected
 	ConnServerUnavailable
 	ConnBadIdentity
 	ConnAuthFail
-	ConnNetErr    ConnAckCode = 0xf0
-	ConnBadPacket ConnAckCode = 0xf1
-	ConnDialErr   ConnAckCode = 0xf2
+	ConnTimeout   ConAckCode = 0xf0
+	ConnBadPacket ConAckCode = 0xf1
+	ConnDialErr   ConAckCode = 0xf2
 )
+
+type PubAckCode = byte
+
+const ()
 
 type SubAckCode = byte
 

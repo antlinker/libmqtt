@@ -2,8 +2,6 @@ package libmqtt
 
 import "bytes"
 
-type Subscriber func(topic string, qos QosLevel, msg []byte)
-
 // SubscribePacket is sent from the Client to the Server
 // to create one or more Subscriptions.
 //

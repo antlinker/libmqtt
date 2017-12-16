@@ -3,5 +3,13 @@ language: go
 go:
   - 1.9.x
 
+# install emqtt via docker
+before_install:
+  - sudo apt-get -qq update
+  - sudo apt-get install -y curl lksctp-tools
+  - curl -fsSL http://emqtt.com/downloads/latest/ubuntu16_04-deb -o emqttd.deb
+  - sudo dpkg -i emqttd.deb
+  - service emqttd start
+
 script:
   - make test

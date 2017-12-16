@@ -9,8 +9,8 @@ type PublishPacket struct {
 	Qos       QosLevel
 	IsRetain  bool
 	TopicName string
-	PacketId  uint16
 	Payload   []byte
+	packetId  uint16
 }
 
 func (p *PublishPacket) Type() CtrlType {
@@ -34,8 +34,8 @@ func (p *PublishPacket) payload() (result *bytes.Buffer) {
 	result = &bytes.Buffer{}
 	encodeDataWithLen([]byte(p.TopicName), result)
 	if p.Qos > Qos0 {
-		result.WriteByte(byte(p.PacketId >> 8))
-		result.WriteByte(byte(p.PacketId))
+		result.WriteByte(byte(p.packetId >> 8))
+		result.WriteByte(byte(p.packetId))
 	}
 	result.Write(p.Payload)
 	return

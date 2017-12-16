@@ -35,7 +35,7 @@ func TestDecodeOnePacket(t *testing.T) {
 
 	buffer.Reset()
 	switch pkt.(type) {
-	case *ConnPacket:
+	case *ConPacket:
 		pkt.Bytes(buffer)
 		pktBytes := buffer.Bytes()
 		if bytes.Compare(pktBytes, targetBytes) != 0 {
