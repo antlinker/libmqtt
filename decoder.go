@@ -1,3 +1,19 @@
+/*
+ * Copyright GoIIoT (https://github.com/goiiot)
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package libmqtt
 
 import (
@@ -22,12 +38,15 @@ func decodeOnePacket(reader io.Reader) (pkt Packet, err error) {
 	}
 
 	body := make([]byte, bytesToRead)
-	n, err := io.ReadFull(reader, body[:])
-	if n < 2 {
-		err = ErrInvalidPacket
-	}
-	if err != nil {
-		return
+	if bytesToRead > 0 {
+		var n = 0
+		n, err = io.ReadFull(reader, body[:])
+		if n < 2 {
+			err = ErrInvalidPacket
+		}
+		if err != nil {
+			return
+		}
 	}
 
 	header := headerBytes[0]
@@ -160,7 +179,7 @@ func decodeString(data []byte) (string, []byte) {
 		return "", data
 	}
 	length := int(data[0])<<8 + int(data[1])
-	return string(data[2: 2+length]), data[2+length:]
+	return string(data[2 : 2+length]), data[2+length:]
 }
 
 func decodeData(data []byte) ([]byte, []byte) {
@@ -168,14 +187,15 @@ func decodeData(data []byte) ([]byte, []byte) {
 		return nil, data
 	}
 	length := int(data[0])<<8 + int(data[1])
-	return data[2: 2+length], data[2+length:]
+	return data[2 : 2+length], data[2+length:]
 }
 
 func decodeRemainLength(reader io.Reader) (result int, err error) {
-	m := 1
 	buf := make([]byte, 1)
 	_, err = io.ReadFull(reader, buf[:])
 	result = int(buf[0] & 127)
+	lg.v("remaining length:", result)
+	m := 1
 	for (buf[0] & 0x80) != 0 {
 		_, err = io.ReadFull(reader, buf[:])
 		if err != nil {

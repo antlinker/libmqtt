@@ -1,3 +1,19 @@
+/*
+ * Copyright GoIIoT (https://github.com/goiiot)
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package libmqtt
 
 import (
@@ -77,51 +93,6 @@ func TestConnPacket(t *testing.T) {
 	testConnBytes := buffer.Bytes()
 	if bytes.Compare(testConnBytes, connBytes) != 0 {
 		t.Log(testConnBytes)
-		t.Fail()
-	}
-}
-
-var (
-	connAckPkg   = &ConAckPacket{Present: true, Code: ConnAccepted}
-	connAckBytes = []byte{0x20, 0x02, 0x01, 0x00}
-)
-
-func BenchmarkConnAckPacket_Bytes(b *testing.B) {
-	buffer := &bytes.Buffer{}
-
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		connAckPkg.Bytes(buffer)
-	}
-}
-
-func TestDisConnAckPacket(t *testing.T) {
-	buffer := &bytes.Buffer{}
-	connAckPkg.Bytes(buffer)
-	testConnAckBytes := buffer.Bytes()
-	if bytes.Compare(testConnAckBytes, connAckBytes) != 0 {
-		t.Fail()
-	}
-}
-
-var (
-	disConnPkg = &disConPacket{}
-)
-
-func BenchmarkDisConnPacket_Bytes(b *testing.B) {
-	buffer := &bytes.Buffer{}
-
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		disConnPkg.Bytes(buffer)
-	}
-}
-
-func TestDisConnPacket(t *testing.T) {
-	buffer := &bytes.Buffer{}
-	disConnPkg.Bytes(buffer)
-	testDisConnBytes := buffer.Bytes()
-	if bytes.Compare(testDisConnBytes, disConnBytes) != 0 {
 		t.Fail()
 	}
 }
