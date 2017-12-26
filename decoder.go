@@ -17,12 +17,7 @@
 package libmqtt
 
 import (
-	"errors"
 	"io"
-)
-
-var (
-	ErrInvalidPacket = errors.New("read invalid packet ")
 )
 
 func decodeOnePacket(reader io.Reader) (pkt Packet, err error) {
@@ -42,7 +37,7 @@ func decodeOnePacket(reader io.Reader) (pkt Packet, err error) {
 		var n = 0
 		n, err = io.ReadFull(reader, body[:])
 		if n < 2 {
-			err = ErrInvalidPacket
+			err = ErrBadPacket
 		}
 		if err != nil {
 			return
@@ -54,7 +49,7 @@ func decodeOnePacket(reader io.Reader) (pkt Packet, err error) {
 	case CtrlConn:
 		protocol, next := decodeString(body)
 		if len(next) < 2 {
-			err = ErrInvalidPacket
+			err = ErrBadPacket
 			return
 		}
 		hasUsername := next[1]&0x80>>7 == 1
@@ -68,7 +63,7 @@ func decodeOnePacket(reader io.Reader) (pkt Packet, err error) {
 			WillRetain:   next[1]&0x20>>5 == 1,
 			Keepalive:    uint16(next[2])<<8 + uint16(next[3]),
 		}
-		tmpPkt.ClientId, next = decodeString(next[4:])
+		tmpPkt.ClientID, next = decodeString(next[4:])
 		if tmpPkt.IsWill {
 			tmpPkt.WillTopic, next = decodeString(next)
 			tmpPkt.WillMessage, next = decodeData(next)
@@ -82,7 +77,7 @@ func decodeOnePacket(reader io.Reader) (pkt Packet, err error) {
 		pkt = tmpPkt
 	case CtrlConnAck:
 		if len(body) < 2 {
-			err = ErrInvalidPacket
+			err = ErrBadPacket
 			return
 		}
 		pkt = &ConAckPacket{
@@ -92,7 +87,7 @@ func decodeOnePacket(reader io.Reader) (pkt Packet, err error) {
 	case CtrlPublish:
 		topicName, next := decodeString(body)
 		if len(next) < 2 {
-			err = ErrInvalidPacket
+			err = ErrBadPacket
 			return
 		}
 		tmpPkg := &PublishPacket{
@@ -102,30 +97,30 @@ func decodeOnePacket(reader io.Reader) (pkt Packet, err error) {
 			TopicName: topicName,
 		}
 		if tmpPkg.Qos > Qos0 {
-			tmpPkg.PacketId = uint16(next[0])<<8 + uint16(next[1])
+			tmpPkg.PacketID = uint16(next[0])<<8 + uint16(next[1])
 			next = next[2:]
 		}
 		tmpPkg.Payload = next[:]
 		pkt = tmpPkg
 	case CtrlPubAck:
 		pkt = &PubAckPacket{
-			PacketId: uint16(body[0])<<8 + uint16(body[1]),
+			PacketID: uint16(body[0])<<8 + uint16(body[1]),
 		}
 	case CtrlPubRecv:
 		pkt = &PubRecvPacket{
-			PacketId: uint16(body[0])<<8 + uint16(body[1]),
+			PacketID: uint16(body[0])<<8 + uint16(body[1]),
 		}
 	case CtrlPubRel:
 		pkt = &PubRelPacket{
-			PacketId: uint16(body[0])<<8 + uint16(body[1]),
+			PacketID: uint16(body[0])<<8 + uint16(body[1]),
 		}
 	case CtrlPubComp:
 		pkt = &PubCompPacket{
-			PacketId: uint16(body[0])<<8 + uint16(body[1]),
+			PacketID: uint16(body[0])<<8 + uint16(body[1]),
 		}
 	case CtrlSubscribe:
 		pktTmp := &SubscribePacket{
-			PacketId: uint16(body[0])<<8 + uint16(body[1]),
+			PacketID: uint16(body[0])<<8 + uint16(body[1]),
 		}
 		next := body[2:]
 		topics := make([]*Topic, 0)
@@ -139,7 +134,7 @@ func decodeOnePacket(reader io.Reader) (pkt Packet, err error) {
 		pkt = pktTmp
 	case CtrlSubAck:
 		pktTmp := &SubAckPacket{
-			PacketId: uint16(body[0])<<8 + uint16(body[1]),
+			PacketID: uint16(body[0])<<8 + uint16(body[1]),
 		}
 		next := body[2:]
 		codes := make([]SubAckCode, 0)
@@ -149,7 +144,7 @@ func decodeOnePacket(reader io.Reader) (pkt Packet, err error) {
 		pkt = pktTmp
 	case CtrlUnSub:
 		pktTmp := &UnSubPacket{
-			PacketId: uint16(body[0])<<8 + uint16(body[1]),
+			PacketID: uint16(body[0])<<8 + uint16(body[1]),
 		}
 		next := body[2:]
 		topics := make([]string, 0)
@@ -162,7 +157,7 @@ func decodeOnePacket(reader io.Reader) (pkt Packet, err error) {
 		pkt = pktTmp
 	case CtrlUnSubAck:
 		pkt = &UnSubAckPacket{
-			PacketId: uint16(body[0])<<8 + uint16(body[1]),
+			PacketID: uint16(body[0])<<8 + uint16(body[1]),
 		}
 	case CtrlPingReq:
 		pkt = PingReqPacket

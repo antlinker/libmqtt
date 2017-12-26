@@ -24,7 +24,7 @@ type ConPacket struct {
 	protoLevel   ProtocolLevel
 	Username     string
 	Password     string
-	ClientId     string
+	ClientID     string
 	CleanSession bool
 	IsWill       bool
 	WillQos      QosLevel
@@ -34,10 +34,12 @@ type ConPacket struct {
 	WillMessage  []byte
 }
 
+// Type ConPacket's type is CtrlConn
 func (c *ConPacket) Type() CtrlType {
 	return CtrlConn
 }
 
+// Bytes encode ConPacket to bytes
 func (c *ConPacket) Bytes(buffer *bytes.Buffer) (err error) {
 	if buffer == nil || c == nil {
 		return
@@ -69,8 +71,8 @@ func (c *ConPacket) Bytes(buffer *bytes.Buffer) (err error) {
 }
 
 func (c *ConPacket) flags() byte {
-	var connectFlag byte = 0
-	if c.ClientId == "" {
+	var connectFlag byte
+	if c.ClientID == "" {
 		c.CleanSession = true
 	}
 
@@ -101,7 +103,7 @@ func (c *ConPacket) flags() byte {
 func (c *ConPacket) payload() *bytes.Buffer {
 	result := &bytes.Buffer{}
 	// client id
-	encodeDataWithLen([]byte(c.ClientId), result)
+	encodeDataWithLen([]byte(c.ClientID), result)
 
 	// will topic and message
 	if c.IsWill {
@@ -126,13 +128,15 @@ func (c *ConPacket) payload() *bytes.Buffer {
 // The first packet sent from the Server to the Client MUST be a ConAckPacket
 type ConAckPacket struct {
 	Present bool
-	Code    ConAckCode
+	Code    ConnAckCode
 }
 
+// Type ConAckPacket's type is CtrlConnAck
 func (c *ConAckPacket) Type() CtrlType {
 	return CtrlConnAck
 }
 
+// Bytes encode ConAckPacket to bytes
 func (c *ConAckPacket) Bytes(buffer *bytes.Buffer) (err error) {
 	if buffer == nil || c == nil {
 		return
@@ -148,12 +152,13 @@ func (c *ConAckPacket) Bytes(buffer *bytes.Buffer) (err error) {
 	return buffer.WriteByte(c.Code)
 }
 
-// disConPacket is the final Control Packet sent from the Client to the Server.
-// It indicates that the Client is disconnecting cleanly.
 var (
+	// DisConPacket is the final instance of disConPacket
 	DisConPacket = &disConPacket{}
 )
 
+// disConPacket is the final Control Packet sent from the Client to the Server.
+// It indicates that the Client is disconnecting cleanly.
 type disConPacket struct {
 }
 

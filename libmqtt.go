@@ -21,6 +21,7 @@ import (
 	"errors"
 )
 
+// Packet is MQTT control packet
 type Packet interface {
 	// Type return the packet type
 	Type() CtrlType
@@ -29,11 +30,13 @@ type Packet interface {
 	Bytes(*bytes.Buffer) error
 }
 
+// Topic for both topic name and topic qos
 type Topic struct {
 	Name string
 	Qos  QosLevel
 }
 
+// String
 func (t *Topic) String() string {
 	return t.Name
 }
@@ -42,37 +45,55 @@ const (
 	maxMsgSize = 0xffffff7f
 )
 
+// CtrlType is MQTT Control packet type
 type CtrlType = byte
 
 const (
+	// CtrlConn Connect
 	CtrlConn CtrlType = iota + 1
+	// CtrlConnAck Connect Ack
 	CtrlConnAck
+	// CtrlPublish Publish
 	CtrlPublish
+	// CtrlPubAck Publish Ack
 	CtrlPubAck
+	// CtrlPubRecv Publish Received
 	CtrlPubRecv
+	// CtrlPubRel Publish Release
 	CtrlPubRel
+	// CtrlPubComp Publish Complete
 	CtrlPubComp
+	// CtrlSubscribe Subscribe
 	CtrlSubscribe
+	// CtrlSubAck Subscribe Ack
 	CtrlSubAck
+	// CtrlUnSub UnSubscribe
 	CtrlUnSub
+	// CtrlUnSubAck UnSubscribe Ack
 	CtrlUnSubAck
+	// CtrlPingReq Ping Request
 	CtrlPingReq
+	// CtrlPingResp Ping Response
 	CtrlPingResp
+	// CtrlDisConn Disconnect
 	CtrlDisConn
 )
 
+// ProtocolLevel MQTT Protocol
 type ProtocolLevel = byte
 
-const (
-	V31 ProtocolLevel = iota + 3
-	V311
-)
+// V311 means MQTT 3.1.1
+const V311 ProtocolLevel = 4
 
+// QosLevel is either 0, 1, 2
 type QosLevel = byte
 
 const (
+	// Qos0 0
 	Qos0 QosLevel = iota
+	// Qos1 1
 	Qos1
+	// Qos2 2
 	Qos2
 )
 
@@ -80,29 +101,39 @@ var (
 	mqtt = []byte("MQTT")
 )
 
-type ConAckCode = byte
+// ConnAckCode is connection response code from server
+type ConnAckCode = byte
 
 const (
-	ConnAccepted ConAckCode = iota
+	// ConnAccepted client accepted by server
+	ConnAccepted ConnAckCode = iota
+	// ConnBadProtocol Protocol not supported
 	ConnBadProtocol
-	ConnIdRejected
+	// ConnIDRejected Connection Id not valid
+	ConnIDRejected
+	// ConnServerUnavailable Server error
 	ConnServerUnavailable
+	// ConnBadIdentity Identity failed
 	ConnBadIdentity
+	// ConnAuthFail Auth failed
 	ConnAuthFail
 )
 
 var (
-	ErrTimeOut   = errors.New("connection timeout ")
+	// ErrTimeOut connection timeout error
+	ErrTimeOut = errors.New("connection timeout ")
+	// ErrBadPacket connection
 	ErrBadPacket = errors.New("connection decoded bad packet ")
 )
 
-type PubAckCode = byte
-
+// SubAckCode is returned by server in SubAckPacket
 type SubAckCode = byte
 
 const (
+	// SubOkMaxQos0 QoS 0 is used by server
 	SubOkMaxQos0 SubAckCode = iota
+	// SubOkMaxQos1 QoS 1 is used by server
 	SubOkMaxQos1
+	// SubOkMaxQos2 QoS 2 is used by server
 	SubOkMaxQos2
-	SubFail = 0x80
 )

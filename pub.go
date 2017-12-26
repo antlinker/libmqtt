@@ -26,13 +26,15 @@ type PublishPacket struct {
 	IsRetain  bool
 	TopicName string
 	Payload   []byte
-	PacketId  uint16
+	PacketID  uint16
 }
 
+// Type PublishPacket's type is CtrlPublish
 func (p *PublishPacket) Type() CtrlType {
 	return CtrlPublish
 }
 
+// Bytes encode PublishPacket into buffer
 func (p *PublishPacket) Bytes(buffer *bytes.Buffer) (err error) {
 	if buffer == nil || p == nil {
 		return
@@ -50,8 +52,8 @@ func (p *PublishPacket) payload() (result *bytes.Buffer) {
 	result = &bytes.Buffer{}
 	encodeDataWithLen([]byte(p.TopicName), result)
 	if p.Qos > Qos0 {
-		result.WriteByte(byte(p.PacketId >> 8))
-		result.WriteByte(byte(p.PacketId))
+		result.WriteByte(byte(p.PacketID >> 8))
+		result.WriteByte(byte(p.PacketID))
 	}
 	result.Write(p.Payload)
 	return
@@ -59,13 +61,15 @@ func (p *PublishPacket) payload() (result *bytes.Buffer) {
 
 // PubAckPacket is the response to a PublishPacket with QoS level 1.
 type PubAckPacket struct {
-	PacketId uint16
+	PacketID uint16
 }
 
+// Type PubAckPacket's type is CtrlPubAck
 func (p *PubAckPacket) Type() CtrlType {
 	return CtrlPubAck
 }
 
+// Bytes encode PubAckPacket into buffer
 func (p *PubAckPacket) Bytes(buffer *bytes.Buffer) (err error) {
 	if buffer == nil || p == nil {
 		return
@@ -76,20 +80,22 @@ func (p *PubAckPacket) Bytes(buffer *bytes.Buffer) (err error) {
 	// remaining length
 	buffer.WriteByte(0x02)
 	// packet id
-	buffer.WriteByte(byte(p.PacketId >> 8))
-	return buffer.WriteByte(byte(p.PacketId))
+	buffer.WriteByte(byte(p.PacketID >> 8))
+	return buffer.WriteByte(byte(p.PacketID))
 }
 
 // PubRecvPacket is the response to a PublishPacket with QoS 2.
 // It is the second packet of the QoS 2 protocol exchange.
 type PubRecvPacket struct {
-	PacketId uint16
+	PacketID uint16
 }
 
+// Type PubRecvPacket's type is CtrlPubRecv
 func (p *PubRecvPacket) Type() CtrlType {
 	return CtrlPubRecv
 }
 
+// Bytes encode PubRecvPacket into buffer
 func (p *PubRecvPacket) Bytes(buffer *bytes.Buffer) (err error) {
 	if buffer == nil || p == nil {
 		return
@@ -100,20 +106,22 @@ func (p *PubRecvPacket) Bytes(buffer *bytes.Buffer) (err error) {
 	// remaining length
 	buffer.WriteByte(0x02)
 	// packet id
-	buffer.WriteByte(byte(p.PacketId >> 8))
-	return buffer.WriteByte(byte(p.PacketId))
+	buffer.WriteByte(byte(p.PacketID >> 8))
+	return buffer.WriteByte(byte(p.PacketID))
 }
 
 // PubRelPacket is the response to a PubRecvPacket.
 // It is the third packet of the QoS 2 protocol exchange.
 type PubRelPacket struct {
-	PacketId uint16
+	PacketID uint16
 }
 
+// Type PubRelPacket's type is CtrlPubRel
 func (p *PubRelPacket) Type() CtrlType {
 	return CtrlPubRel
 }
 
+// Bytes encode PubRelPacket into buffer
 func (p *PubRelPacket) Bytes(buffer *bytes.Buffer) (err error) {
 	if buffer == nil || p == nil {
 		return
@@ -123,20 +131,22 @@ func (p *PubRelPacket) Bytes(buffer *bytes.Buffer) (err error) {
 	// remaining length
 	buffer.WriteByte(0x02)
 	// packet id
-	buffer.WriteByte(byte(p.PacketId >> 8))
-	return buffer.WriteByte(byte(p.PacketId))
+	buffer.WriteByte(byte(p.PacketID >> 8))
+	return buffer.WriteByte(byte(p.PacketID))
 }
 
 // PubCompPacket is the response to a PubRelPacket.
 // It is the fourth and final packet of the QoS 892 2 protocol exchange. 893
 type PubCompPacket struct {
-	PacketId uint16
+	PacketID uint16
 }
 
+// Type PubCompPacket's type is CtrlPubComp
 func (p *PubCompPacket) Type() CtrlType {
 	return CtrlPubComp
 }
 
+// Bytes encode PubCompPacket into buffer
 func (p *PubCompPacket) Bytes(buffer *bytes.Buffer) (err error) {
 	if buffer == nil || p == nil {
 		return
@@ -146,6 +156,6 @@ func (p *PubCompPacket) Bytes(buffer *bytes.Buffer) (err error) {
 	// remaining length
 	buffer.WriteByte(0x02)
 	// packet id
-	buffer.WriteByte(byte(p.PacketId >> 8))
-	return buffer.WriteByte(byte(p.PacketId))
+	buffer.WriteByte(byte(p.PacketID >> 8))
+	return buffer.WriteByte(byte(p.PacketID))
 }

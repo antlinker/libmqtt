@@ -27,14 +27,16 @@ import "bytes"
 // The SubscribePacket also specifies (for each Subscription)
 // the maximum QoS with which the Server can send Application Messages to the Client
 type SubscribePacket struct {
-	PacketId uint16
+	PacketID uint16
 	Topics   []*Topic
 }
 
+// Type SubscribePacket's type is CtrlSubscribe
 func (s *SubscribePacket) Type() CtrlType {
 	return CtrlSubscribe
 }
 
+// Bytes encode SubscribePacket into buffer
 func (s *SubscribePacket) Bytes(buffer *bytes.Buffer) (err error) {
 	if buffer == nil || s == nil {
 		return
@@ -46,8 +48,8 @@ func (s *SubscribePacket) Bytes(buffer *bytes.Buffer) (err error) {
 	// remaining length
 	encodeRemainLength(2+payload.Len(), buffer)
 	// packet id
-	buffer.WriteByte(byte(s.PacketId >> 8))
-	buffer.WriteByte(byte(s.PacketId))
+	buffer.WriteByte(byte(s.PacketID >> 8))
+	buffer.WriteByte(byte(s.PacketID))
 
 	_, err = payload.WriteTo(buffer)
 
@@ -75,14 +77,16 @@ func (s *SubscribePacket) payload() (result *bytes.Buffer) {
 // that specify the maximum QoS level that was granted in
 // each Subscription that was requested by the SubscribePacket.
 type SubAckPacket struct {
-	PacketId uint16
+	PacketID uint16
 	Codes    []SubAckCode
 }
 
+// Type SubAckPacket's type is CtrlSubAck
 func (s *SubAckPacket) Type() CtrlType {
 	return CtrlSubAck
 }
 
+// Bytes encode SubAckPacket into buffer
 func (s *SubAckPacket) Bytes(buffer *bytes.Buffer) (err error) {
 	if buffer == nil || s == nil {
 		return
@@ -93,8 +97,8 @@ func (s *SubAckPacket) Bytes(buffer *bytes.Buffer) (err error) {
 	payload := s.payload()
 	encodeRemainLength(2+payload.Len(), buffer)
 	// packet id
-	buffer.WriteByte(byte(s.PacketId >> 8))
-	buffer.WriteByte(byte(s.PacketId))
+	buffer.WriteByte(byte(s.PacketID >> 8))
+	buffer.WriteByte(byte(s.PacketID))
 	// payload
 	_, err = payload.WriteTo(buffer)
 
@@ -114,14 +118,16 @@ func (s *SubAckPacket) payload() (result *bytes.Buffer) {
 // UnSubPacket is sent by the Client to the Server,
 // to unsubscribe from topics.
 type UnSubPacket struct {
-	PacketId   uint16
+	PacketID   uint16
 	TopicNames []string
 }
 
+// Type UnSubPacket's type is CtrlUnSub
 func (s *UnSubPacket) Type() CtrlType {
 	return CtrlUnSub
 }
 
+// Bytes encode UnSubPacket into buffer
 func (s *UnSubPacket) Bytes(buffer *bytes.Buffer) (err error) {
 	if buffer == nil || s == nil {
 		return
@@ -133,8 +139,8 @@ func (s *UnSubPacket) Bytes(buffer *bytes.Buffer) (err error) {
 	// remaining length
 	encodeRemainLength(2+payload.Len(), buffer)
 	// packet id
-	buffer.WriteByte(byte(s.PacketId >> 8))
-	buffer.WriteByte(byte(s.PacketId))
+	buffer.WriteByte(byte(s.PacketID >> 8))
+	buffer.WriteByte(byte(s.PacketID))
 
 	_, err = payload.WriteTo(buffer)
 
@@ -155,13 +161,15 @@ func (s *UnSubPacket) payload() (result *bytes.Buffer) {
 // UnSubAckPacket is sent by the Server to the Client to confirm
 // receipt of an UnSubPacket
 type UnSubAckPacket struct {
-	PacketId uint16
+	PacketID uint16
 }
 
+// Type UnSubAckPacket's type is CtrlUnSubAck
 func (s *UnSubAckPacket) Type() CtrlType {
 	return CtrlUnSubAck
 }
 
+// Bytes encode UnSubAckPacket into buffer
 func (s *UnSubAckPacket) Bytes(buffer *bytes.Buffer) (err error) {
 	if buffer == nil || s == nil {
 		return
@@ -172,8 +180,8 @@ func (s *UnSubAckPacket) Bytes(buffer *bytes.Buffer) (err error) {
 	// remaining length
 	buffer.WriteByte(0x02)
 	// packet id
-	buffer.WriteByte(byte(s.PacketId >> 8))
-	err = buffer.WriteByte(byte(s.PacketId))
+	buffer.WriteByte(byte(s.PacketID >> 8))
+	err = buffer.WriteByte(byte(s.PacketID))
 
 	return
 }

@@ -27,7 +27,7 @@ import (
 // the server is configured with default configuration
 
 const (
-	waitTime = 2 * time.Second
+	waitTime = 1 * time.Second
 )
 
 var (
@@ -72,8 +72,24 @@ func tlsClient() Client {
 	)
 }
 
-func connHandler(t *testing.T) ConnHandler {
-	return func(server string, code ConAckCode, err error) {
+// conn
+func TestClient_Connect(t *testing.T) {
+	var c Client
+	afterConn := func() {
+		c.Destroy(true)
+	}
+
+	c = plainClient()
+	testConn(c, t, afterConn)
+	c.Wait()
+
+	c = tlsClient()
+	testConn(c, t, afterConn)
+	c.Wait()
+}
+
+func testConn(c Client, t *testing.T, afterConn func()) {
+	c.Connect(func(server string, code ConnAckCode, err error) {
 		if err != nil {
 			t.Log(err)
 			t.FailNow()
@@ -83,126 +99,99 @@ func connHandler(t *testing.T) ConnHandler {
 			t.Log(code)
 			t.FailNow()
 		}
-	}
-}
 
-// conn
-func TestClient_Connect(t *testing.T) {
-	c := plainClient()
-	testConn(c, t)
-	<-time.After(waitTime)
-	c.Destroy(true)
-
-	c = tlsClient()
-	testConn(c, t)
-	<-time.After(waitTime)
-	c.Destroy(true)
-}
-
-func testConn(c Client, t *testing.T) {
-	c.Connect(connHandler(t))
+		if afterConn != nil {
+			afterConn()
+		}
+	})
 }
 
 // conn -> pub
 func TestClient_Publish(t *testing.T) {
-	c := plainClient()
-	testConn(c, t)
-	<-time.After(waitTime)
-	testPub(c, t)
-	<-time.After(waitTime)
-	c.Destroy(true)
+	var c Client
+	afterConn := func() {
+		c.Publish(testMsgs...)
+		<-time.After(waitTime)
+		c.Destroy(true)
+	}
+
+	c = plainClient()
+	testConn(c, t, afterConn)
+	c.Wait()
 
 	c = tlsClient()
-	testConn(c, t)
-	<-time.After(waitTime)
-	testPub(c, t)
-	<-time.After(waitTime)
-	c.Destroy(true)
-}
-
-func testPub(c Client, t *testing.T) {
-	c.Publish(func(topic string, code PubAckCode) {
-	}, testMsgs...)
+	testConn(c, t, afterConn)
+	c.Wait()
 }
 
 func TestClient_Subscribe(t *testing.T) {
-	c := plainClient()
-	testConn(c, t)
-	<-time.After(waitTime)
-	testSub(c, t)
-	<-time.After(waitTime)
-	c.Destroy(true)
+	var c Client
+	afterConn := func() {
+		testSub(c, t)
+		<-time.After(waitTime)
+		c.Publish(testMsgs...)
+		<-time.After(waitTime)
+		c.Destroy(true)
+	}
+
+	c = plainClient()
+	testConn(c, t, afterConn)
+	c.Wait()
 
 	c = tlsClient()
-	testConn(c, t)
-	<-time.After(waitTime)
-	testSub(c, t)
-	<-time.After(waitTime)
-	c.Destroy(true)
+	testConn(c, t, afterConn)
+	c.Wait()
 }
 
-// conn -> sub -> pub
 func testSub(c Client, t *testing.T) {
 	count := atomic.Value{}
 	count.Store(int(0))
-	c.Subscribe(func(topic string, code SubAckCode, msg []byte) {
-		if code == SubFail {
-			t.FailNow()
-		}
+	N := len(testMsgs)
+	for index, value := range testMsgs {
+		i := index
+		v := value
+		c.Handle(v.TopicName, func(topic string, maxQos SubAckCode, msg []byte) {
+			if maxQos != v.Qos || bytes.Compare(v.Payload, msg) != 0 {
+				t.Log("fail at sub topic =", topic,
+					", content unexcepted, payload =", string(msg),
+					"target payload =", string(v.Payload),
+				)
+				t.FailNow()
+			} else {
+				count.Store(count.Load().(int) + 1)
+			}
 
-		count.Store(count.Load().(int) + 1)
-		switch topic {
-		case testTopics[0]:
-			if code != Qos0 || bytes.Compare(testMsgs[0].Payload, msg) != 0 {
-				t.Log("fail at sub topic 0")
-				t.FailNow()
-			} else {
-				t.Log("received sub topic 0")
+			if i == N-1 {
+				if c := count.Load().(int); c != N {
+					t.Log("sub recv count =", c)
+					t.FailNow()
+				}
 			}
-		case testTopics[1]:
-			if code != Qos1 || bytes.Compare(testMsgs[1].Payload, msg) != 0 {
-				t.Log("fail at sub topic 1")
-				t.FailNow()
-			} else {
-				t.Log("received sub topic 1")
-			}
-		case testTopics[2]:
-			if code != Qos2 || bytes.Compare(testMsgs[2].Payload, msg) != 0 {
-				t.Log("fail at sub topic 2")
-				t.FailNow()
-			} else {
-				t.Log("received sub topic 2")
-			}
-		}
-	}, testSubs...)
-	<-time.After(waitTime)
-	testPub(c, t)
-	<-time.After(waitTime)
-	if c := count.Load().(int); c != len(testMsgs) {
-		t.Log("sub recv count =", c)
-		t.FailNow()
+		})
 	}
+	c.Subscribe(testSubs...)
 }
 
 // conn -> sub -> pub -> unSub
 func TestClient_UnSubscribe(t *testing.T) {
-	c := plainClient()
-	testUnSub(c, t)
-	<-time.After(waitTime)
-	c.Destroy(true)
+	var c Client
+	afterConn := func() {
+		testSub(c, t)
+		<-time.After(waitTime)
+		c.Publish(testMsgs...)
+		<-time.After(waitTime)
+		c.UnSubscribe(testTopics...)
+		<-time.After(waitTime)
+		c.Publish(testMsgs...)
+		<-time.After(waitTime)
+		c.Destroy(true)
+	}
+
+	c = plainClient()
+	testConn(c, t, afterConn)
+	c.Wait()
 
 	c = tlsClient()
-	testUnSub(c, t)
-	<-time.After(waitTime)
-	c.Destroy(true)
-}
-
-func testUnSub(c Client, t *testing.T) {
-	testConn(c, t)
-	<-time.After(waitTime)
-	testSub(c, t)
-	<-time.After(waitTime)
-	c.UnSubscribe(func(topic string, code SubAckCode) {}, testTopics...)
-	<-time.After(waitTime)
-	testPub(c, t)
+	testConn(c, t, afterConn)
+	c.Wait()
 }

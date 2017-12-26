@@ -27,7 +27,7 @@ var (
 		Password:   "pass",
 		protoLevel: V311,
 
-		ClientId:     "1",
+		ClientID:     "1",
 		CleanSession: true,
 		IsWill:       true,
 		WillQos:      Qos2,
@@ -41,7 +41,7 @@ var (
 		Password:   "pass",
 		protoLevel: V311,
 
-		ClientId:     "1",
+		ClientID:     "1",
 		CleanSession: true,
 		Keepalive:    10,
 	}

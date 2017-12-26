@@ -19,7 +19,9 @@ package libmqtt
 import "bytes"
 
 var (
-	PingReqPacket  = &pingReqPacket{}
+	// PingReqPacket is the actual PingReqPacket
+	PingReqPacket = &pingReqPacket{}
+	// PingRespPacket is the actual PingReqPacket
 	PingRespPacket = &pingRespPacket{}
 )
 

@@ -32,13 +32,13 @@ type idGenerator struct {
 	usedIds *sync.Map
 }
 
-func newIdGenerator() *idGenerator {
+func newIDGenerator() *idGenerator {
 	return &idGenerator{
 		usedIds: &sync.Map{},
 	}
 }
 
-func (g *idGenerator) nextId() uint16 {
+func (g *idGenerator) next() uint16 {
 	var i uint16
 	for i = 1; i < math.MaxUint16; i++ {
 		if _, ok := g.usedIds.Load(i); !ok {

@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-//+build cgo lib
+// +build cgo lib
 
 package main
 
@@ -25,8 +25,8 @@ package main
 */
 import "C"
 
+// Publish (topic *C.char, qos C.goiiot_lib_mqtt_qos_t, payload *C.char, payloadSize C.int)
 //export Publish
-// Publish(topic *C.char, qos C.goiiot_lib_mqtt_qos_t, payload *C.char, payloadSize C.int)
 func Publish(topic *C.char, qos C.goiiot_lib_mqtt_qos_t, payload *C.char, payloadSize C.int) {
 	// goTopic := C.GoString(topic)
 }

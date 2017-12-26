@@ -1,4 +1,5 @@
 *.o
+*.out
 a.out
 conn_test
 pub_test

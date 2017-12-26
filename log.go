@@ -21,14 +21,21 @@ import (
 	"os"
 )
 
+// LogLevel is used to set log level in client creation
 type LogLevel int
 
 const (
+	// Silent No log
 	Silent LogLevel = iota
+	// Verbose log all
 	Verbose
+	// Debug log with debug and above
 	Debug
+	// Info log with info and above
 	Info
+	// Warning log with warning and above
 	Warning
+	// Error log error only
 	Error
 )
 
