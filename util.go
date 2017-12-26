@@ -16,9 +16,39 @@
 
 package libmqtt
 
+import (
+	"math"
+	"sync"
+)
+
 func boolToByte(flag bool) (result byte) {
 	if flag {
 		result = 0x01
 	}
 	return
+}
+
+type idGenerator struct {
+	usedIds *sync.Map
+}
+
+func newIdGenerator() *idGenerator {
+	return &idGenerator{
+		usedIds: &sync.Map{},
+	}
+}
+
+func (g *idGenerator) nextId() uint16 {
+	var i uint16
+	for i = 1; i < math.MaxUint16; i++ {
+		if _, ok := g.usedIds.Load(i); !ok {
+			g.usedIds.Store(i, nil)
+			return i
+		}
+	}
+	return 1
+}
+
+func (g *idGenerator) free(id uint16) {
+	g.usedIds.Delete(id)
 }

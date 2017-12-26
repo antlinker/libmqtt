@@ -18,19 +18,15 @@ package libmqtt
 
 import (
 	"bytes"
-	"context"
 	"crypto/tls"
 	"crypto/x509"
 	"io/ioutil"
 	"net"
 	"sync"
-	"sync/atomic"
 	"time"
 )
 
-var (
-	lg *logger
-)
+var lg *logger
 
 // BackoffOption defines the parameters for the reconnecting backoff strategy.
 type BackoffOption struct {
@@ -169,6 +165,14 @@ func WithRecvBuf(size int) Option {
 	}
 }
 
+func WithRouter(r TopicRouter) Option {
+	return func(c *client) {
+		if r != nil {
+			c.router = r
+		}
+	}
+}
+
 // WithLogger will create basic logger for log
 func WithLogger(l LogLevel) Option {
 	return func(c *client) {
@@ -182,6 +186,9 @@ func NewClient(options ...Option) Client {
 	for _, o := range options {
 		o(c)
 	}
+
+	c.sendC = make(chan Packet, c.options.sendChanSize)
+	c.recvC = make(chan PublishPacket, c.options.recvChanSize)
 	return c
 }
 
@@ -209,10 +216,10 @@ type clientOptions struct {
 // Client act as a mqtt client
 type Client interface {
 	// Connect to all specified server with client options
-	Connect(h ConHandler)
+	Connect(h ConnHandler)
 
 	// Publish a message for the topic
-	Publish(h PubHandler, msg ...*TopicMsg)
+	Publish(h PubHandler, msg ...*PublishPacket)
 
 	// Subscribe topic(s)
 	Subscribe(h SubHandler, topics ...*Topic)
@@ -227,16 +234,14 @@ type Client interface {
 	Destroy(force bool)
 }
 
-type clientAction func()
-
 type client struct {
-	options  *clientOptions
-	actC     chan clientAction       // action channel
-	subC     chan PublishPacket      // sub channel
-	pubC     chan PublishPacket      // pub channel
-	subs     map[string][]SubHandler // topic -> []SubHandler
-	conn     *sync.Map               // server -> connection
-	packetId *atomic.Value           // current packet id
+	options *clientOptions     // client connection options
+	router  TopicRouter        // topic router
+	sendC   chan Packet        // Pub channel for sending publish packet to server
+	recvC   chan PublishPacket // Pub recv channel for receiving
+	subs    *sync.Map          // Topic(s) -> []SubHandler
+	conn    *sync.Map          // ServerAddr -> connection
+	idGen   *idGenerator       // sorted in use packetId []uint16
 }
 
 // defaultClient create the client with default options
@@ -254,62 +259,83 @@ func defaultClient() *client {
 			keepalive:       2 * time.Minute,  // default keepalive interval is 2min
 			keepaliveFactor: 1.5,              // default reasonable amount of time 3min
 		},
-		actC:     make(chan clientAction),
-		pubC:     make(chan PublishPacket, 256),
-		subC:     make(chan PublishPacket, 256),
-		subs:     make(map[string][]SubHandler),
-		conn:     &sync.Map{},
-		packetId: &atomic.Value{},
+		router: &TextRouter{}, // default router is REST style router
+		subs:   &sync.Map{},
+		conn:   &sync.Map{},
+		idGen:  newIdGenerator(),
 	}
-	c.packetId.Store(uint16(0))
 	return c
 }
 
 // Connect to all designated server
-func (c *client) Connect(h ConHandler) {
+func (c *client) Connect(h ConnHandler) {
 	for _, s := range c.options.servers {
 		go c.connect(s, h)
 	}
+	go func() {
+		for pkt := range c.recvC {
+			c.router.Dispatch(pkt)
+		}
+	}()
 }
 
 // Publish message(s) to topic(s), one to one
-func (c *client) Publish(h PubHandler, msg ...*TopicMsg) {
+func (c *client) Publish(h PubHandler, msg ...*PublishPacket) {
 	for _, m := range msg {
 		if m.Qos > Qos2 {
 			panic("invalid QoS level, should either be 0, 1 or 2 ")
 		}
-
-		c.pubC <- PublishPacket{
+		toSend := &PublishPacket{
 			Qos:       m.Qos,
 			IsRetain:  m.IsRetain,
 			TopicName: m.TopicName,
 			Payload:   m.Payload,
 		}
+		if toSend.Qos != Qos0 {
+			toSend.PacketId = c.nextId()
+		}
+
+		c.sendC <- toSend
 	}
 }
 
 // SubScribe topic(s)
 func (c *client) Subscribe(h SubHandler, topics ...*Topic) {
-	for _, t := range topics {
-		if v, ok := c.subs[t.Name]; ok {
-			// subscribed message before, append this subscriber to the list
-			_ = append(v, h)
-			c.subs[t.Name] = v
-		} else {
-			// first time subscribe, start a goroutine to handle msg
+	if h != nil {
+		for _, t := range topics {
+			c.router.Handle(t.Name, h)
 		}
 	}
+
+	// send sub message
+	lg.d("SEND Subscribe, topic(s) =", topics)
+	c.sendC <- &SubscribePacket{
+		Topics:   topics,
+		PacketId: c.nextId(),
+	}
+}
+
+// Handle subscription message route
+func (c *client) Handle(topic string, h SubHandler) {
+	c.router.Handle(topic, h)
 }
 
 // UnSubscribe topic(s)
 func (c *client) UnSubscribe(h UnSubHandler, topics ...string) {
 	for _, t := range topics {
-		delete(c.subs, t)
+		c.subs.Delete(t)
 	}
+
+	lg.d("SEND UnSub, topic(s) =", topics)
+	c.sendC <- &UnSubPacket{
+		TopicNames: topics,
+		PacketId:   c.nextId(),
+	}
+
 }
 
 // Wait will wait for all connection to exit
-// Once called Wait(), you should never add any server to this client
+// Once called Connect(), you should never add any server to this client
 func (c *client) Wait() {
 	wg := &sync.WaitGroup{}
 	connSet := make([]*connImpl, 0)
@@ -333,6 +359,7 @@ func (c *client) Wait() {
 // Destroy will disconnect form all server
 // If force is true, then close connection without sending a DisConnPacket
 func (c *client) Destroy(force bool) {
+	close(c.recvC)
 	c.conn.Range(func(k, v interface{}) bool {
 		va := v.(*connImpl)
 		va.close(force)
@@ -341,7 +368,7 @@ func (c *client) Destroy(force bool) {
 }
 
 // connect to one server and start mqtt logic
-func (c *client) connect(server string, h ConHandler) {
+func (c *client) connect(server string, h ConnHandler) {
 	var conn net.Conn
 	var err error
 
@@ -350,7 +377,7 @@ func (c *client) connect(server string, h ConHandler) {
 		conn, err = tls.DialWithDialer(&net.Dialer{Timeout: c.options.dialTimeout}, "tcp", server, c.options.tlsConfig)
 		if err != nil {
 			lg.e("connection with tls failed", err)
-			h(server, ConnDialErr)
+			h(server, 0, err)
 			return
 		}
 	} else {
@@ -358,13 +385,35 @@ func (c *client) connect(server string, h ConHandler) {
 		conn, err = net.DialTimeout("tcp", server, c.options.dialTimeout)
 		if err != nil {
 			lg.e("connection failed", err)
-			h(server, ConnDialErr)
+			h(server, 0, err)
 			return
 		}
 	}
 
-	srvConn := c.newConn(server, conn)
-	srvConn.send(context.TODO(), &ConPacket{
+	connImpl := &connImpl{
+		parent:     c,
+		name:       server,
+		conn:       conn,
+		sendBuf:    &bytes.Buffer{},
+		keepaliveC: make(chan interface{}),
+		recvC:      make(chan Packet),
+		workers:    &sync.WaitGroup{},
+	}
+
+	connImpl.workers.Add(2)
+	// send
+	go func() {
+		connImpl.handleSend()
+		connImpl.workers.Done()
+	}()
+
+	// receive
+	go func() {
+		connImpl.handleRecv()
+		connImpl.workers.Done()
+	}()
+
+	connImpl.send(&ConPacket{
 		Username:     c.options.username,
 		Password:     c.options.password,
 		ClientId:     c.options.clientId,
@@ -378,118 +427,54 @@ func (c *client) connect(server string, h ConHandler) {
 	})
 
 	select {
-	case pkt, more := <-srvConn.recvC:
+	case pkt, more := <-connImpl.recvC:
 		if more {
 			if pkt.Type() == CtrlConnAck {
 				p := pkt.(*ConAckPacket)
 				if p.Code != ConnAccepted {
-					h(server, p.Code)
+					h(server, p.Code, nil)
 					return
 				}
 			} else {
-				h(server, ConnBadPacket)
+				h(server, 0, ErrBadPacket)
 				return
 			}
 		} else {
-			h(server, ConnBadPacket)
+			h(server, 0, ErrBadPacket)
 			return
 		}
 	case <-time.After(c.options.dialTimeout):
-		h(server, ConnTimeout)
+		h(server, 0, ErrTimeOut)
 		return
 	}
 
 	// login success
 	// start mqtt logic
-	c.conn.Store(server, srvConn)
-	srvConn.start()
+	c.conn.Store(server, connImpl)
+	connImpl.start()
 }
 
-// newConn create a new connection to server
-func (c *client) newConn(server string, conn net.Conn) *connImpl {
-	co := &connImpl{
-		parent:     c,
-		name:       server,
-		conn:       conn,
-		sendBuf:    &bytes.Buffer{},
-		keepaliveC: make(chan interface{}),
-		recvC:      make(chan Packet),
-		sendC:      make(chan sendPkt),
-		workers:    &sync.WaitGroup{},
-		packetId:   &sync.Map{},
-		currentId:  &atomic.Value{},
-	}
-	co.currentId.Store(uint16(0))
+// get next valid packet id
+func (c *client) nextId() uint16 {
+	return c.idGen.nextId()
+}
 
-	// handle packet receive
-	go func() {
-		for {
-			pkt, err := decodeOnePacket(conn)
-			if err != nil {
-				lg.e("connection to server broken: ", err)
-				close(co.recvC)
-				close(co.sendC)
-				close(co.keepaliveC)
-				break
-			}
-
-			// pass packets
-			if pkt == PingRespPacket {
-				lg.d("received keepalive message")
-				co.keepaliveC <- nil
-			} else {
-				lg.d("received message")
-				co.recvC <- pkt
-			}
-		}
-	}()
-
-	// handle packet send
-	go func() {
-		for pkt := range co.sendC {
-			pkt.packet.Bytes(co.sendBuf)
-			if _, err := co.sendBuf.WriteTo(conn); err != nil {
-				pkt.errC <- err
-				break
-			}
-
-			if pkt.packet.Type() == CtrlDisConn {
-				// disconnect to server
-				break
-			}
-		}
-	}()
-
-	return co
+// free packet id
+func (c *client) freeId(id uint16) {
+	c.idGen.free(id)
 }
 
 // connImpl is the wrapper of connection to server
+// tend to actual packet send and receive
 type connImpl struct {
 	parent     *client          // client which created this connection
 	name       string           // server addr info
 	conn       net.Conn         // connection to server
 	sendBuf    *bytes.Buffer    // buffer for packet send
 	recvC      chan Packet      // received packet from server
-	sendC      chan sendPkt     // need to send packet
 	keepaliveC chan interface{} // keepalive packet
-	currentId  *atomic.Value
-	packetId   *sync.Map       // used pktId (key: packetId, value: packet)
-	workers    *sync.WaitGroup // mqtt logic processor
-}
-
-type sendPkt struct {
-	packet Packet
-	errC   chan error
-}
-
-// send mqtt packet
-func (c *connImpl) send(ctx context.Context, pkt Packet) <-chan error {
-	errC := make(chan error)
-	c.sendC <- sendPkt{
-		packet: pkt,
-		errC:   errC,
-	}
-	return errC
+	packetId   *sync.Map        // used pktId (key: packetId, value: packet)
+	workers    *sync.WaitGroup  // mqtt logic processor
 }
 
 // start mqtt logic
@@ -506,24 +491,68 @@ func (c *connImpl) start() {
 	// inspect incoming packet
 	for pkt := range c.recvC {
 		switch pkt.Type() {
+		case CtrlSubAck:
+			p := pkt.(*SubAckPacket)
+			lg.d("RECV SubAck, id =", p.PacketId)
+			c.parent.freeId(p.PacketId)
+			// TODO: notify Sub QoS response
+		case CtrlUnSubAck:
+			p := pkt.(*UnSubAckPacket)
+			lg.d("RECV UnSubAck, id =", p.PacketId)
+			c.parent.freeId(p.PacketId)
+		case CtrlPublish:
+			p := pkt.(*PublishPacket)
+			lg.d("RECV Publish, id =", p.PacketId, "QoS =", p.Qos)
+			c.parent.recvC <- *p
+			lg.i("PUB Publish to client, topic =", p.TopicName)
+
+			// tend to QoS issue
+			switch p.Qos {
+			case Qos2:
+				lg.d("SEND PubAck for Publish, id =", p.PacketId)
+				c.send(&PubAckPacket{PacketId: p.PacketId})
+			case Qos1:
+				lg.d("SEND PubAck for Publish, id =", p.PacketId)
+				c.send(&PubRecvPacket{PacketId: p.PacketId})
+			}
 		case CtrlPubAck:
+			p := pkt.(*PubAckPacket)
+			lg.d("RECV PubAck, id =", p.PacketId)
+
+			c.parent.freeId(p.PacketId)
 		case CtrlPubRecv:
+			p := pkt.(*PubRecvPacket)
+			lg.d("RECV PubRec, id =", p.PacketId)
+
+			c.send(&PubRelPacket{PacketId: p.PacketId})
+			lg.d("SEND PubRel, id =", p.PacketId)
 		case CtrlPubRel:
+			p := pkt.(*PubRelPacket)
+			lg.d("RECV PubRel, id =", p.PacketId)
+
+			c.send(&PubCompPacket{PacketId: p.PacketId})
+			lg.d("SEND PubComp, id =", p.PacketId)
 		case CtrlPubComp:
+			p := pkt.(*PubCompPacket)
+			lg.d("RECV PubComp id =", p.PacketId)
+
+			c.parent.freeId(p.PacketId)
+		default:
+			lg.d("RECV packet, type =", pkt.Type())
 		}
 	}
-	// TODO: complete mqtt logic
 }
 
 // keepalive with server
 func (c *connImpl) keepalive() {
-	lg.d("started keepalive")
+	lg.d("START keepalive")
+	defer lg.d("END keepalive")
+
 	t := time.NewTicker(c.parent.options.keepalive)
 	defer t.Stop()
-	defer lg.d("keepalive stopped")
 
 	for range t.C {
-		c.send(context.TODO(), PingReqPacket)
+		c.send(PingReqPacket)
 
 		select {
 		case _, more := <-c.keepaliveC:
@@ -539,20 +568,52 @@ func (c *connImpl) keepalive() {
 	}
 }
 
-// get next valid packet id
-func (c *connImpl) nextPacketId() uint16 {
-	nextId := c.currentId.Load().(uint16) + 1
-	for _, ok := c.packetId.Load(nextId); ok; {
-		c.currentId.Store(nextId + 1)
-	}
-	c.currentId.Store(nextId)
-	return nextId
-}
-
 // close this connection
 func (c *connImpl) close(force bool) {
 	lg.v(c.name, "close(", force, ")")
 	c.conn.Close()
+}
+
+// handle client message send
+func (c *connImpl) handleSend() {
+	for pkt := range c.parent.sendC {
+		pkt.Bytes(c.sendBuf)
+		if _, err := c.sendBuf.WriteTo(c.conn); err != nil {
+			// raise error
+			break
+		}
+
+		if pkt.Type() == CtrlDisConn {
+			// disconnect to server
+			break
+		}
+	}
+}
+
+// handle all message recv
+func (c *connImpl) handleRecv() {
+	for {
+		pkt, err := decodeOnePacket(c.conn)
+		if err != nil {
+			lg.e("CONN broken", "server =", c.name, "err =", err)
+			close(c.recvC)
+			close(c.keepaliveC)
+			break
+		}
+
+		// pass packets
+		if pkt == PingRespPacket {
+			lg.d("RECV keepalive message")
+			c.keepaliveC <- nil
+		} else {
+			c.recvC <- pkt
+		}
+	}
+}
+
+// send internal mqtt logic packet
+func (c *connImpl) send(pkt Packet) {
+	c.parent.sendC <- pkt
 }
 
 // wait for connection lost or close

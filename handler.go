@@ -16,14 +16,14 @@
 
 package libmqtt
 
-// ConHandler handler the bad connect result
-type ConHandler func(server string, code ConAckCode)
+// ConnHandler handler the bad connect result
+type ConnHandler func(server string, code ConAckCode, err error)
 
 // PubHandler handler bad topic pub
 type PubHandler func(topic string, code PubAckCode)
 
 // SubHandler handler bad topic sub
-type SubHandler func(topic string, qos QosLevel, msg []byte)
+type SubHandler func(topic string, maxQos SubAckCode, msg []byte)
 
 // UnSubHandler handler bad topic unSub
 type UnSubHandler func(topic string, code SubAckCode)

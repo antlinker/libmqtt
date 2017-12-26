@@ -16,20 +16,26 @@
 
 package libmqtt
 
-import "bytes"
+import (
+	"bytes"
+	"errors"
+)
 
 type Packet interface {
+	// Type return the packet type
 	Type() CtrlType
 
 	// Bytes dump a mqtt Packet object to mqtt bytes into provided buffer
 	Bytes(*bytes.Buffer) error
 }
 
-type TopicMsg PublishPacket
-
 type Topic struct {
 	Name string
 	Qos  QosLevel
+}
+
+func (t *Topic) String() string {
+	return t.Name
 }
 
 const (
@@ -83,9 +89,11 @@ const (
 	ConnServerUnavailable
 	ConnBadIdentity
 	ConnAuthFail
-	ConnTimeout   ConAckCode = 0xf0
-	ConnBadPacket ConAckCode = 0xf1
-	ConnDialErr   ConAckCode = 0xf2
+)
+
+var (
+	ErrTimeOut   = errors.New("connection timeout ")
+	ErrBadPacket = errors.New("connection decoded bad packet ")
 )
 
 type PubAckCode = byte

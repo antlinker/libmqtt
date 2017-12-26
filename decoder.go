@@ -102,7 +102,7 @@ func decodeOnePacket(reader io.Reader) (pkt Packet, err error) {
 			TopicName: topicName,
 		}
 		if tmpPkg.Qos > Qos0 {
-			tmpPkg.packetId = uint16(next[0])<<8 + uint16(next[1])
+			tmpPkg.PacketId = uint16(next[0])<<8 + uint16(next[1])
 			next = next[2:]
 		}
 		tmpPkg.Payload = next[:]
@@ -194,7 +194,6 @@ func decodeRemainLength(reader io.Reader) (result int, err error) {
 	buf := make([]byte, 1)
 	_, err = io.ReadFull(reader, buf[:])
 	result = int(buf[0] & 127)
-	lg.v("remaining length:", result)
 	m := 1
 	for (buf[0] & 0x80) != 0 {
 		_, err = io.ReadFull(reader, buf[:])

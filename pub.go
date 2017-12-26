@@ -26,7 +26,7 @@ type PublishPacket struct {
 	IsRetain  bool
 	TopicName string
 	Payload   []byte
-	packetId  uint16
+	PacketId  uint16
 }
 
 func (p *PublishPacket) Type() CtrlType {
@@ -38,7 +38,7 @@ func (p *PublishPacket) Bytes(buffer *bytes.Buffer) (err error) {
 		return
 	}
 	// fixed header
-	buffer.WriteByte(CtrlSubscribe<<4 | boolToByte(p.IsDup)<<3 |
+	buffer.WriteByte(CtrlPublish<<4 | boolToByte(p.IsDup)<<3 |
 		boolToByte(p.IsRetain) | p.Qos<<1)
 	payload := p.payload()
 	encodeRemainLength(payload.Len(), buffer)
@@ -50,8 +50,8 @@ func (p *PublishPacket) payload() (result *bytes.Buffer) {
 	result = &bytes.Buffer{}
 	encodeDataWithLen([]byte(p.TopicName), result)
 	if p.Qos > Qos0 {
-		result.WriteByte(byte(p.packetId >> 8))
-		result.WriteByte(byte(p.packetId))
+		result.WriteByte(byte(p.PacketId >> 8))
+		result.WriteByte(byte(p.PacketId))
 	}
 	result.Write(p.Payload)
 	return
@@ -72,7 +72,7 @@ func (p *PubAckPacket) Bytes(buffer *bytes.Buffer) (err error) {
 	}
 
 	// fixed header
-	buffer.WriteByte(CtrlPubComp << 4)
+	buffer.WriteByte(CtrlPubAck << 4)
 	// remaining length
 	buffer.WriteByte(0x02)
 	// packet id
