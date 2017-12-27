@@ -1,0 +1,5 @@
+#ifndef _LIB_MQTT_CALLBACK_
+#define _LIB_MQTT_CALLBACK_
+
+
+#endif /*_LIB_MQTT_CALLBACK_*/

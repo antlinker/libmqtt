@@ -1,5 +1,0 @@
-#ifndef _GO_IIOT_LIB_MQTT_CALLBACK_
-#define _GO_IIOT_LIB_MQTT_CALLBACK_
-
-
-#endif /*_GO_IIOT_LIB_MQTT_CALLBACK_*/

@@ -6,10 +6,10 @@ go:
 # install emqtt via docker
 before_install:
   - sudo apt-get -qq update
-  - sudo apt-get install -y curl lksctp-tools
-  - curl -fsSL http://emqtt.com/downloads/latest/ubuntu14_04 -o emqttd.deb
-  - sudo dpkg -i emqttd.deb
-  - service emqttd start
+  - sudo apt-get install -y curl lksctp-tools unzip
+  - curl -fsSL http://emqtt.com/downloads/latest/ubuntu14_04 -o emqttd.zip
+  - unzip emqttd.zip
+  - cd emqttd && ./bin/emqttd start
 
 script:
   - make test
