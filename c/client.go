@@ -1,3 +1,5 @@
+// +build cgo lib
+
 /*
  * Copyright GoIIoT (https://github.com/goiiot)
  *
@@ -14,18 +16,16 @@
  * limitations under the License.
  */
 
-// +build cgo lib
-
 package main
 
 // #cgo CFLAGS: -I include
 /*
-#include "LibMQTTConst.h"
-#include "LibMQTTCallback.h"
+#include "libmqtt_callback.h"
+#include "libmqtt_const.h"
 */
 import "C"
 
-// Publish (topic *C.char, qos C.goiiot_lib_mqtt_qos_t, payload *C.char, payloadSize C.int)
+// Publish (topic *C.char, qos C.lib_mqtt_qos_t, payload *C.char, payloadSize C.int)
 //export Publish
 func Publish(topic *C.char, qos C.lib_mqtt_qos_t, payload *C.char, payloadSize C.int) {
 	// goTopic := C.GoString(topic)
