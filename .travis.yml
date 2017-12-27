@@ -1,15 +1,20 @@
 language: go
+dist: trusty
 
 go:
   - 1.9.x
 
-# install emqtt via docker
+# install emqttd
 before_install:
   - sudo apt-get -qq update
   - sudo apt-get install -y curl lksctp-tools unzip
   - curl -fsSL http://emqtt.com/downloads/latest/ubuntu14_04 -o emqttd.zip
   - unzip emqttd.zip
-  - cd emqttd && ./bin/emqttd start && cd ..
+
+before_script:
+  - cd emqttd
+  - ./bin/emqttd start
+  - cd ..
 
 script:
   - make test

@@ -11,7 +11,7 @@ MQTT 3.1.1 client lib with pure Go
 1. A full functional MQTT 3.1.1 client (currently without session state storage)
 1. HTTP server like API
 1. Customizable TopicRouter (predefined `TextRouter`, `RegexRouter` and `RestRouter` in work)
-1. More gonic, more efficient
+1. More efficient, idiomatic Go
 
 ## Usage
 
@@ -31,7 +31,7 @@ import "github.com/goiiot/libmqtt"
 
 3. Create a custom client
 
-If you would like to see all the options avaliable, please see the [godoc](https://godoc.org/github.com/goiiot/libmqtt)
+If you would like to explore all the options avaliable, please refer to [godoc](https://godoc.org/github.com/goiiot/libmqtt)
 
 ```go
 client := libmqtt.NewClient(
