@@ -27,30 +27,28 @@ import (
 	"time"
 )
 
-var lg *logger
-
 // BackoffOption defines the parameters for the reconnecting backoff strategy.
 type BackoffOption struct {
 	// MaxDelay defines the upper bound of backoff delay,
 	// which is time in second.
-	MaxDelay uint16
+	MaxDelay time.Duration
 
 	// FirstDelay is the time to wait before retrying after the first failure,
 	// also time in second.
-	FirstDelay uint16
+	FirstDelay time.Duration
 
 	// Factor is applied to the backoff after each retry.
 	// e.g. FirstDelay = 1 and Factor = 2, then the SecondDelay is 2, the ThirdDelay is 4s
-	Factor float32
+	Factor float64
 }
 
 // Option is client option for connection options
 type Option func(*client)
 
 // WithCleanSession will set clean flag in connect packet
-func WithCleanSession() Option {
+func WithCleanSession(f bool) Option {
 	return func(c *client) {
-		c.options.cleanSession = true
+		c.options.cleanSession = f
 	}
 }
 
@@ -78,6 +76,15 @@ func WithKeepalive(keepalive uint16, factor float64) Option {
 func WithBackoffStrategy(bf *BackoffOption) Option {
 	return func(c *client) {
 		if bf != nil {
+			if bf.FirstDelay < time.Millisecond {
+				bf.FirstDelay = time.Millisecond
+			}
+			if bf.MaxDelay < bf.FirstDelay {
+				bf.MaxDelay = bf.FirstDelay
+			}
+			if bf.Factor < 1 {
+				bf.Factor = 1
+			}
 			c.options.bf = bf
 		}
 	}
@@ -175,8 +182,8 @@ func WithRouter(r TopicRouter) Option {
 	}
 }
 
-// WithLogger will create basic logger for log
-func WithLogger(l LogLevel) Option {
+// WithLog will create basic logger for log
+func WithLog(l LogLevel) Option {
 	return func(c *client) {
 		lg = newLogger(l)
 	}
@@ -189,8 +196,9 @@ func NewClient(options ...Option) Client {
 		o(c)
 	}
 
+	c.msgC = make(chan *message)
 	c.sendC = make(chan Packet, c.options.sendChanSize)
-	c.recvC = make(chan PublishPacket, c.options.recvChanSize)
+	c.recvC = make(chan *PublishPacket, c.options.recvChanSize)
 	return c
 }
 
@@ -217,14 +225,15 @@ type clientOptions struct {
 
 // Client act as a mqtt client
 type Client interface {
+	// Handle register topic handlers, mostly used for RegexHandler, RestHandler
+	// the default handler inside the client is TextHandler, which match the exactly same topic
+	Handle(topic string, h TopicHandler)
+
 	// Connect to all specified server with client options
-	Connect(h ConnHandler)
+	Connect(ConnHandler)
 
 	// Publish a message for the topic
-	Publish(msg ...*PublishPacket)
-
-	// Handle register topic handlers, mostly used for RegexHandler, RestHandler
-	Handle(topic string, h SubHandler)
+	Publish(packets ...*PublishPacket)
 
 	// Subscribe topic(s)
 	Subscribe(topics ...*Topic)
@@ -237,17 +246,30 @@ type Client interface {
 
 	// Destroy all client connection
 	Destroy(force bool)
+
+	// handlers
+	HandlePub(PubHandler)
+	HandleSub(SubHandler)
+	HandleUnSub(UnSubHandler)
+	HandleNet(NetHandler)
 }
 
 type client struct {
-	options *clientOptions     // client connection options
-	subs    *sync.Map          // Topic(s) -> []SubHandler
-	conn    *sync.Map          // ServerAddr -> connection
-	sendC   chan Packet        // Pub channel for sending publish packet to server
-	recvC   chan PublishPacket // Pub recv channel for receiving
-	idGen   *idGenerator       // sorted in use packetId []uint16
-	router  TopicRouter        // topic router
-	workers *sync.WaitGroup    // workers
+	options *clientOptions      // client connection options
+	subs    *sync.Map           // Topic(s) -> []TopicHandler
+	conn    *sync.Map           // ServerAddr -> connection
+	msgC    chan *message       // error channel
+	sendC   chan Packet         // Pub channel for sending publish packet to server
+	recvC   chan *PublishPacket // Pub recv channel for receiving
+	idGen   *idGenerator        // sorted in use packetId []uint16
+	router  TopicRouter         // topic router
+	workers *sync.WaitGroup     // workers
+
+	// handlers
+	pEH PubHandler
+	sEH SubHandler
+	uEH UnSubHandler
+	nEH NetHandler
 }
 
 // defaultClient create the client with default options
@@ -257,8 +279,8 @@ func defaultClient() *client {
 			sendChanSize: 128,
 			recvChanSize: 128,
 			bf: &BackoffOption{
-				MaxDelay:   120, // default max retry delay is 2min
-				FirstDelay: 1,   // first retry delay is 1s
+				MaxDelay:   2 * time.Minute, // default max retry delay is 2min
+				FirstDelay: 5 * time.Second, // first retry delay is 5s
 				Factor:     1.5,
 			},
 			dialTimeout:     20 * time.Second, // default timeout when dial to server
@@ -274,16 +296,47 @@ func defaultClient() *client {
 	return c
 }
 
+// Handle subscription message route
+func (c *client) Handle(topic string, h TopicHandler) {
+	if h != nil {
+		lg.d("HANDLE registered handler, topic =", topic)
+		c.router.Handle(topic, h)
+	}
+}
+
 // Connect to all designated server
 func (c *client) Connect(h ConnHandler) {
 	for _, s := range c.options.servers {
 		c.workers.Add(1)
-		go c.connect(s, h)
+		go c.connect(s, h, 0)
 	}
 
 	go func() {
 		for pkt := range c.recvC {
 			c.router.Dispatch(pkt)
+		}
+	}()
+
+	go func() {
+		for e := range c.msgC {
+			switch e.what {
+			case pubMsg:
+				if c.pEH != nil {
+					c.pEH(e.msg, e.err)
+				}
+			case subMsg:
+				if c.sEH != nil {
+					c.sEH(e.obj.([]*Topic), e.err)
+				}
+			case unSubMsg:
+				if c.uEH != nil {
+					c.uEH(e.obj.([]string), e.err)
+				}
+			case netMsg:
+				if c.nEH != nil {
+					c.nEH(e.msg, e.err)
+				}
+			}
 		}
 	}()
 }
@@ -303,17 +356,9 @@ func (c *client) Publish(msg ...*PublishPacket) {
 		}
 
 		if toSend.Qos != Qos0 {
-			toSend.PacketID = c.nextID()
+			toSend.PacketID = c.idGen.next(toSend)
 		}
 		c.sendC <- toSend
-	}
-}
-
-// Handle subscription message route
-func (c *client) Handle(topic string, h SubHandler) {
-	if h != nil {
-		lg.d("HANDLE registered handler, topic =", topic)
-		c.router.Handle(topic, h)
 	}
 }
 
@@ -321,10 +366,11 @@ func (c *client) Handle(topic string, h SubHandler) {
 func (c *client) Subscribe(topics ...*Topic) {
 	// send sub message
 	lg.d("SEND subscribe, topic(s) =", topics)
-	c.sendC <- &SubscribePacket{
-		Topics:   topics,
-		PacketID: c.nextID(),
+	s := &SubscribePacket{
+		Topics: topics,
 	}
+	s.PacketID = c.idGen.next(s)
+	c.sendC <- s
 }
 
 // UnSubscribe topic(s)
@@ -334,10 +380,11 @@ func (c *client) UnSubscribe(topics ...string) {
 	}
 
 	lg.d("SEND UnSub, topic(s) =", topics)
-	c.sendC <- &UnSubPacket{
+	u := &UnSubPacket{
 		TopicNames: topics,
-		PacketID:   c.nextID(),
 	}
+	u.PacketID = c.idGen.next(u)
+	c.sendC <- u
 }
 
 // Wait will wait for all connection to exit
@@ -348,6 +395,8 @@ func (c *client) Wait() {
 // Destroy will disconnect form all server
 // If force is true, then close connection without sending a DisConnPacket
 func (c *client) Destroy(force bool) {
+	close(c.sendC)
+	c.options.bf = nil
 	if force {
 		c.conn.Range(func(k, v interface{}) bool {
 			va := v.(*connImpl)
@@ -359,10 +408,29 @@ func (c *client) Destroy(force bool) {
 	}
 }
 
-// connect to one server and start mqtt logic
-func (c *client) connect(server string, h ConnHandler) {
-	defer c.workers.Done()
+// HandlePubMsg register handler for pub error
+func (c *client) HandlePub(h PubHandler) {
+	c.pEH = h
+}
 
+// HandleSubMsg register handler for extra sub info
+func (c *client) HandleSub(h SubHandler) {
+	c.sEH = h
+}
+
+// HandleUnSubMsg register handler for unsubscription error
+func (c *client) HandleUnSub(h UnSubHandler) {
+	c.uEH = h
+}
+
+// HandleNetError register handler for net error
+func (c *client) HandleNet(h NetHandler) {
+	c.nEH = h
+}
+
+// connect to one server and startLogic mqtt logic
+func (c *client) connect(server string, h ConnHandler, triedTimes int) {
+	defer c.workers.Done()
 	var conn net.Conn
 	var err error
 
@@ -390,10 +458,23 @@ func (c *client) connect(server string, h ConnHandler) {
 		conn:       conn,
 		sendBuf:    &bytes.Buffer{},
 		keepaliveC: make(chan int),
+		sendC:      make(chan Packet),
 		recvC:      make(chan Packet),
 	}
 
-	go connImpl.handleSend()
+	if c.options.bf != nil {
+		if triedTimes < 1 {
+			connImpl.reconDelay = c.options.bf.FirstDelay
+		} else {
+			connImpl.reconDelay = time.Duration(math.Pow(c.options.bf.Factor, float64(triedTimes)) * float64(c.options.bf.FirstDelay))
+			if connImpl.reconDelay > c.options.bf.MaxDelay {
+				connImpl.reconDelay = c.options.bf.MaxDelay
+			}
+		}
+	}
+
+	go connImpl.handleLogicSend()
+	go connImpl.handleClientSend()
 	go connImpl.handleRecv()
 
 	connImpl.send(&ConPacket{
@@ -431,17 +512,22 @@ func (c *client) connect(server string, h ConnHandler) {
 		return
 	}
 
-	lg.i("CONN connection success, server =", server)
+	lg.i("CONN success, connected server =", server)
 	go h(server, ConnAccepted, nil)
 
-	// login success, start mqtt logic
+	// login success, startLogic mqtt logic
 	c.conn.Store(server, connImpl)
-	connImpl.start()
-}
+	connImpl.startLogic()
 
-// get next valid packet id
-func (c *client) nextID() uint16 {
-	return c.idGen.next()
+	if c.options.bf != nil {
+		triedTimes++
+		c.workers.Add(1)
+		lg.w("CONN reconnect to server =", server, ", times =", triedTimes, ", delay =", int64(connImpl.reconDelay))
+		go func() {
+			<-time.After(connImpl.reconDelay)
+			c.connect(server, h, triedTimes)
+		}()
+	}
 }
 
 // free packet id
@@ -456,13 +542,15 @@ type connImpl struct {
 	name       string        // server addr info
 	conn       net.Conn      // connection to server
 	sendBuf    *bytes.Buffer // buffer for packet send
+	sendC      chan Packet   // logic send channel
 	recvC      chan Packet   // received packet from server
 	keepaliveC chan int      // keepalive packet
+	reconDelay time.Duration // reconnection delay
 }
 
-// start mqtt logic
-func (c *connImpl) start() {
-	// start keepalive if required
+// startLogic mqtt logic
+func (c *connImpl) startLogic() {
+	// startLogic keepalive if required
 	if c.parent.options.keepalive > 0 {
 		go c.keepalive()
 	}
@@ -473,48 +561,107 @@ func (c *connImpl) start() {
 		case CtrlSubAck:
 			p := pkt.(*SubAckPacket)
 			lg.d("RECV SubAck, id =", p.PacketID)
-			c.parent.freeID(p.PacketID)
-			// TODO: notify Sub QoS response
+
+			if originPkt, ok := c.parent.idGen.getExtra(p.PacketID); ok {
+				switch originPkt.(type) {
+				case *SubscribePacket:
+					originSub := originPkt.(*SubscribePacket)
+					N := len(p.Codes)
+					for i, v := range originSub.Topics {
+						if i < N {
+							v.Qos = p.Codes[i]
+						}
+					}
+					c.parent.msgC <- newSubMsg(originSub.Topics, nil)
+					c.parent.idGen.free(p.PacketID)
+				}
+			}
 		case CtrlUnSubAck:
 			p := pkt.(*UnSubAckPacket)
 			lg.d("RECV UnSubAck, id =", p.PacketID)
-			c.parent.freeID(p.PacketID)
+
+			if originPkt, ok := c.parent.idGen.getExtra(p.PacketID); ok {
+				switch originPkt.(type) {
+				case *UnSubPacket:
+					originUnSub := originPkt.(*UnSubPacket)
+					c.parent.msgC <- newUnSubMsg(originUnSub.TopicNames, nil)
+					c.parent.idGen.free(p.PacketID)
+				}
+			}
 		case CtrlPublish:
 			p := pkt.(*PublishPacket)
 			lg.d("RECV Publish, id =", p.PacketID, "QoS =", p.Qos)
-			c.parent.recvC <- *p
+			// received server publish, send to client
+			c.parent.recvC <- p
 
 			// tend to QoS
 			switch p.Qos {
-			case Qos2:
-				lg.d("SEND PubAck for Publish, id =", p.PacketID)
-				c.send(&PubAckPacket{PacketID: p.PacketID})
 			case Qos1:
 				lg.d("SEND PubAck for Publish, id =", p.PacketID)
+				c.send(&PubAckPacket{PacketID: p.PacketID})
+			case Qos2:
+				lg.d("SEND PubRecv for Publish, id =", p.PacketID)
 				c.send(&PubRecvPacket{PacketID: p.PacketID})
 			}
 		case CtrlPubAck:
 			p := pkt.(*PubAckPacket)
 			lg.d("RECV PubAck, id =", p.PacketID)
 
-			c.parent.freeID(p.PacketID)
+			if originPkt, ok := c.parent.idGen.getExtra(p.PacketID); ok {
+				switch originPkt.(type) {
+				case *PublishPacket:
+					originPub := originPkt.(*PublishPacket)
+					if originPub.Qos == Qos1 {
+						c.parent.msgC <- newPubMsg(originPub.TopicName, nil)
+						c.parent.idGen.free(p.PacketID)
+					}
+				}
+			}
 		case CtrlPubRecv:
 			p := pkt.(*PubRecvPacket)
 			lg.d("RECV PubRec, id =", p.PacketID)
 
-			c.send(&PubRelPacket{PacketID: p.PacketID})
-			lg.d("SEND PubRel, id =", p.PacketID)
+			if originPkt, ok := c.parent.idGen.getExtra(p.PacketID); ok {
+				switch originPkt.(type) {
+				case *PublishPacket:
+					originPub := originPkt.(*PublishPacket)
+					if originPub.Qos == Qos2 {
+						c.send(&PubRelPacket{PacketID: p.PacketID})
+						lg.d("SEND PubRel, id =", p.PacketID)
+					}
+				}
+			}
 		case CtrlPubRel:
 			p := pkt.(*PubRelPacket)
 			lg.d("RECV PubRel, id =", p.PacketID)
 
-			c.send(&PubCompPacket{PacketID: p.PacketID})
-			lg.d("SEND PubComp, id =", p.PacketID)
+			if originPkt, ok := c.parent.idGen.getExtra(p.PacketID); ok {
+				switch originPkt.(type) {
+				case *PublishPacket:
+					originPub := originPkt.(*PublishPacket)
+					if originPub.Qos == Qos2 {
+						c.send(&PubCompPacket{PacketID: p.PacketID})
+						lg.d("SEND PubComp, id =", p.PacketID)
+					}
+				}
+			}
 		case CtrlPubComp:
 			p := pkt.(*PubCompPacket)
 			lg.d("RECV PubComp id =", p.PacketID)
 
-			c.parent.freeID(p.PacketID)
+			if originPkt, ok := c.parent.idGen.getExtra(p.PacketID); ok {
+				switch originPkt.(type) {
+				case *PublishPacket:
+					originPub := originPkt.(*PublishPacket)
+					if originPub.Qos == Qos2 {
+						c.send(&PubRelPacket{PacketID: p.PacketID})
+						lg.d("SEND PubRel, id =", p.PacketID)
+
+						c.parent.msgC <- newPubMsg(originPub.TopicName, nil)
+						c.parent.idGen.free(p.PacketID)
+					}
+				}
+			}
 		default:
 			lg.d("RECV packet, type =", pkt.Type())
 		}
@@ -554,10 +701,40 @@ func (c *connImpl) close() {
 }
 
 // handle client message send
-func (c *connImpl) handleSend() {
+func (c *connImpl) handleClientSend() {
 	for pkt := range c.parent.sendC {
 		pkt.Bytes(c.sendBuf)
 		if _, err := c.sendBuf.WriteTo(c.conn); err != nil {
+			// ALWAYS DETECT net err in receive
+			switch pkt.Type() {
+			case CtrlPublish:
+				c.parent.msgC <- newPubMsg(pkt.(*PublishPacket).TopicName, err)
+			case CtrlSubscribe:
+				c.parent.msgC <- newSubMsg(pkt.(*SubscribePacket).Topics, err)
+			case CtrlUnSub:
+				c.parent.msgC <- newUnSubMsg(pkt.(*UnSubPacket).TopicNames, err)
+			}
+			break
+		}
+		switch pkt.Type() {
+		case CtrlPublish:
+			pub := pkt.(*PublishPacket)
+			if pub.Qos == Qos0 {
+				c.parent.msgC <- newPubMsg(pkt.(*PublishPacket).TopicName, nil)
+			}
+		case CtrlDisConn:
+			// disconnect to server
+			break
+		}
+	}
+}
+
+// handle mqtt logic control packet send
+func (c *connImpl) handleLogicSend() {
+	for pkt := range c.sendC {
+		pkt.Bytes(c.sendBuf)
+		if _, err := c.sendBuf.WriteTo(c.conn); err != nil {
+			// ALWAYS DETECT net err in receive
 			break
 		}
 
@@ -576,6 +753,8 @@ func (c *connImpl) handleRecv() {
 			lg.e("CONN broken", "server =", c.name, "err =", err)
 			close(c.recvC)
 			close(c.keepaliveC)
+			// TODO send proper net error to net handler
+			// c.parent.msgC <- newNetMsg(c.name, err)
 			break
 		}
 
@@ -591,5 +770,5 @@ func (c *connImpl) handleRecv() {
 
 // send internal mqtt logic packet
 func (c *connImpl) send(pkt Packet) {
-	c.parent.sendC <- pkt
+	c.sendC <- pkt
 }

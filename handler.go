@@ -23,17 +23,19 @@ package libmqtt
 // the code value will max byte value (255)
 type ConnHandler func(server string, code ConnAckCode, err error)
 
-// PubHandler handler bad topic pub
-// topic is the client user provided topic
-// err is the error happened when publish
-type PubHandler func(topic string, err error)
-
-// SubHandler handler topic sub
+// TopicHandler handles topic sub message
 // topic is the client user provided topic
 // code can be SubOkMaxQos0, SubOkMaxQos1, SubOkMaxQos2, SubFail
-type SubHandler func(topic string, code SubAckCode, msg []byte)
+type TopicHandler func(topic string, qos QosLevel, msg []byte)
 
-// UnSubHandler handler topic unSub
-// topic is the client user provided topic
-// err is the error happened when unsubscribe
-type UnSubHandler func(topic string, err error)
+// PubHandler handles the error occurred when publish some message
+type PubHandler func(topic string, err error)
+
+// SubHandler handles the error occurred when subscribe some topic
+type SubHandler func(topics []*Topic, err error)
+
+// UnSubHandler handles the error occurred when publish some message
+type UnSubHandler func(topic []string, err error)
+
+// NetHandler handles the error occurred
+type NetHandler func(server string, err error)

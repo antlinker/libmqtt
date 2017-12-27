@@ -9,13 +9,15 @@ import (
 type TopicRouter interface {
 	// Name is the name of router
 	Name() string
-	Handle(topic string, h SubHandler)
-	Dispatch(p PublishPacket)
+	// Handle defines how to register topic with handler
+	Handle(topic string, h TopicHandler)
+	// Dispatch defines the action to dispatch published packet
+	Dispatch(p *PublishPacket)
 }
 
 // RegexRouter use regex to match topic messages
 type RegexRouter struct {
-	sync.Map
+	m *sync.Map
 }
 
 // Name is the name of router
@@ -24,15 +26,23 @@ func (r *RegexRouter) Name() string {
 }
 
 // Handle will register the topic with handler
-func (r *RegexRouter) Handle(topicRegex string, h SubHandler) {
-	r.Store(regexp.MustCompile(topicRegex), h)
+func (r *RegexRouter) Handle(topicRegex string, h TopicHandler) {
+	if r.m == nil {
+		r.m = &sync.Map{}
+	}
+
+	r.m.Store(regexp.MustCompile(topicRegex), h)
 }
 
 // Dispatch the received packet
-func (r *RegexRouter) Dispatch(p PublishPacket) {
-	r.Range(func(k, v interface{}) bool {
+func (r *RegexRouter) Dispatch(p *PublishPacket) {
+	if r.m == nil {
+		return
+	}
+
+	r.m.Range(func(k, v interface{}) bool {
 		if reg := k.(*regexp.Regexp); reg.MatchString(p.TopicName) {
-			handler := v.(SubHandler)
+			handler := v.(TopicHandler)
 			handler(p.TopicName, p.Qos, p.Payload)
 		}
 		return true
@@ -42,7 +52,7 @@ func (r *RegexRouter) Dispatch(p PublishPacket) {
 // TextRouter uses plain string comparison to dispatch topic message
 // this is the default router in client
 type TextRouter struct {
-	sync.Map
+	m *sync.Map
 }
 
 // Name is the name of router
@@ -51,14 +61,22 @@ func (r *TextRouter) Name() string {
 }
 
 // Handle will register the topic with handler
-func (r *TextRouter) Handle(topic string, h SubHandler) {
-	r.Store(topic, h)
+func (r *TextRouter) Handle(topic string, h TopicHandler) {
+	if r.m == nil {
+		r.m = &sync.Map{}
+	}
+
+	r.m.Store(topic, h)
 }
 
 // Dispatch the received packet
-func (r *TextRouter) Dispatch(p PublishPacket) {
-	if h, ok := r.Load(p.TopicName); ok {
-		handler := h.(SubHandler)
+func (r *TextRouter) Dispatch(p *PublishPacket) {
+	if r.m == nil {
+		return
+	}
+
+	if h, ok := r.m.Load(p.TopicName); ok {
+		handler := h.(TopicHandler)
 		handler(p.TopicName, p.Qos, p.Payload)
 	}
 }
@@ -71,4 +89,16 @@ type restRouter struct {
 // Name is the name of router
 func (r *restRouter) Name() string {
 	return "rest"
+}
+
+// Handle will register the topic with handler
+// TODO
+func (r *restRouter) Handle(topic string, h TopicHandler) {
+
+}
+
+// Dispatch the received packet
+// TODO
+func (r *restRouter) Dispatch(p *PublishPacket) {
+
 }

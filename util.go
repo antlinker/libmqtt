@@ -38,11 +38,11 @@ func newIDGenerator() *idGenerator {
 	}
 }
 
-func (g *idGenerator) next() uint16 {
+func (g *idGenerator) next(extra interface{}) uint16 {
 	var i uint16
 	for i = 1; i < math.MaxUint16; i++ {
 		if _, ok := g.usedIds.Load(i); !ok {
-			g.usedIds.Store(i, nil)
+			g.usedIds.Store(i, extra)
 			return i
 		}
 	}
@@ -51,4 +51,8 @@ func (g *idGenerator) next() uint16 {
 
 func (g *idGenerator) free(id uint16) {
 	g.usedIds.Delete(id)
+}
+
+func (g *idGenerator) getExtra(id uint16) (interface{}, bool) {
+	return g.usedIds.Load(id)
 }

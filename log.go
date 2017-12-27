@@ -21,6 +21,8 @@ import (
 	"os"
 )
 
+var lg *logger
+
 // LogLevel is used to set log level in client creation
 type LogLevel int
 

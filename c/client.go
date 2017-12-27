@@ -27,7 +27,7 @@ import "C"
 
 // Publish (topic *C.char, qos C.goiiot_lib_mqtt_qos_t, payload *C.char, payloadSize C.int)
 //export Publish
-func Publish(topic *C.char, qos C.goiiot_lib_mqtt_qos_t, payload *C.char, payloadSize C.int) {
+func Publish(topic *C.char, qos C.lib_mqtt_qos_t, payload *C.char, payloadSize C.int) {
 	// goTopic := C.GoString(topic)
 }
 

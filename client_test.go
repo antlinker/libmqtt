@@ -20,15 +20,10 @@ import (
 	"bytes"
 	"sync/atomic"
 	"testing"
-	"time"
 )
 
 // test with emqttd server (http://emqtt.io/ or https://github.com/emqtt/emqttd)
 // the server is configured with default configuration
-
-const (
-	waitTime = 1 * time.Second
-)
 
 var (
 	testTopics = []string{"/test", "/test/foo", "/test/bar"}
@@ -44,19 +39,28 @@ var (
 	}
 )
 
-func plainClient() Client {
-	return NewClient(
+type extraHandler struct {
+	pubH   func()
+	subH   func()
+	unSubH func()
+	netH   func()
+}
+
+func plainClient(t *testing.T, exH *extraHandler) Client {
+	c := NewClient(
 		WithServer("localhost:1883"),
 		WithDialTimeout(10),
 		WithKeepalive(10, 1.2),
 		WithIdentity("admin", "public"),
 		WithWill("test", Qos0, false, []byte("test data")),
-		WithLogger(Verbose),
+		WithLog(Verbose),
 	)
+	initClient(c, exH, t)
+	return c
 }
 
-func tlsClient() Client {
-	return NewClient(
+func tlsClient(t *testing.T, exH *extraHandler) Client {
+	c := NewClient(
 		WithServer("localhost:8883"),
 		WithTLS(
 			"./testdata/client-cert.pem",
@@ -68,24 +72,61 @@ func tlsClient() Client {
 		WithKeepalive(10, 1.2),
 		WithIdentity("admin", "public"),
 		WithWill("test", Qos0, false, []byte("test data")),
-		WithLogger(Verbose),
+		WithLog(Verbose),
 	)
+	initClient(c, exH, t)
+	return c
 }
 
-// conn
-func TestClient_Connect(t *testing.T) {
-	var c Client
-	afterConn := func() {
-		c.Destroy(true)
-	}
+func initClient(c Client, exH *extraHandler, t *testing.T) {
+	pubCount := &atomic.Value{}
+	pubCount.Store(0)
+	c.HandlePub(func(topic string, err error) {
+		if err != nil {
+			t.Log("pub failed, err =", err)
+			t.FailNow()
+		}
 
-	c = plainClient()
-	testConn(c, t, afterConn)
-	c.Wait()
+		pubCount.Store(pubCount.Load().(int) + 1)
+		if pubCount.Load().(int) == len(testMsgs) {
+			if exH != nil && exH.pubH != nil {
+				exH.pubH()
+			}
+		}
+	})
 
-	c = tlsClient()
-	testConn(c, t, afterConn)
-	c.Wait()
+	c.HandleSub(func(topics []*Topic, err error) {
+		if err != nil {
+			t.Log("sub failed, err =", err)
+			t.FailNow()
+		}
+
+		if exH != nil && exH.subH != nil {
+			exH.subH()
+		}
+	})
+
+	c.HandleUnSub(func(topics []string, err error) {
+		if err != nil {
+			t.Log("unsub failed, err =", err)
+			t.FailNow()
+		}
+
+		if exH != nil && exH.unSubH != nil {
+			exH.unSubH()
+		}
+	})
+
+	c.HandleNet(func(server string, err error) {
+		if err != nil {
+			t.Log("net error, err =", err)
+			t.FailNow()
+		}
+
+		if exH != nil && exH.netH != nil {
+			exH.netH()
+		}
+	})
 }
 
 func testConn(c Client, t *testing.T, afterConn func()) {
@@ -104,43 +145,6 @@ func testConn(c Client, t *testing.T, afterConn func()) {
 			afterConn()
 		}
 	})
-}
-
-// conn -> pub
-func TestClient_Publish(t *testing.T) {
-	var c Client
-	afterConn := func() {
-		c.Publish(testMsgs...)
-		<-time.After(waitTime)
-		c.Destroy(true)
-	}
-
-	c = plainClient()
-	testConn(c, t, afterConn)
-	c.Wait()
-
-	c = tlsClient()
-	testConn(c, t, afterConn)
-	c.Wait()
-}
-
-func TestClient_Subscribe(t *testing.T) {
-	var c Client
-	afterConn := func() {
-		testSub(c, t)
-		<-time.After(waitTime)
-		c.Publish(testMsgs...)
-		<-time.After(waitTime)
-		c.Destroy(true)
-	}
-
-	c = plainClient()
-	testConn(c, t, afterConn)
-	c.Wait()
-
-	c = tlsClient()
-	testConn(c, t, afterConn)
-	c.Wait()
 }
 
 func testSub(c Client, t *testing.T) {
@@ -172,26 +176,119 @@ func testSub(c Client, t *testing.T) {
 	c.Subscribe(testSubs...)
 }
 
+// conn
+func TestClient_Connect(t *testing.T) {
+	var c Client
+	afterConn := func() {
+		c.Destroy(true)
+	}
+
+	c = plainClient(t, nil)
+	testConn(c, t, afterConn)
+	c.Wait()
+
+	c = tlsClient(t, nil)
+	testConn(c, t, afterConn)
+	c.Wait()
+}
+
+// conn -> pub
+func TestClient_Publish(t *testing.T) {
+	var c Client
+	afterConn := func() {
+		c.Publish(testMsgs...)
+	}
+
+	exH := &extraHandler{
+		pubH: func() {
+			c.Destroy(true)
+		},
+	}
+
+	c = plainClient(t, exH)
+	testConn(c, t, afterConn)
+	c.Wait()
+
+	c = tlsClient(t, exH)
+	testConn(c, t, afterConn)
+	c.Wait()
+}
+
+// conn -> sub -> pub
+func TestClient_Subscribe(t *testing.T) {
+	var c Client
+	afterConn := func() {
+		testSub(c, t)
+	}
+
+	extH := &extraHandler{
+		subH: func() {
+			c.Publish(testMsgs...)
+		},
+		pubH: func() {
+			c.Destroy(true)
+		},
+	}
+
+	c = plainClient(t, extH)
+	testConn(c, t, afterConn)
+	c.Wait()
+
+	c = tlsClient(t, extH)
+	testConn(c, t, afterConn)
+	c.Wait()
+}
+
 // conn -> sub -> pub -> unSub
 func TestClient_UnSubscribe(t *testing.T) {
 	var c Client
 	afterConn := func() {
 		testSub(c, t)
-		<-time.After(waitTime)
-		c.Publish(testMsgs...)
-		<-time.After(waitTime)
-		c.UnSubscribe(testTopics...)
-		<-time.After(waitTime)
-		c.Publish(testMsgs...)
-		<-time.After(waitTime)
-		c.Destroy(true)
 	}
 
-	c = plainClient()
+	extH := &extraHandler{
+		subH: func() {
+			c.UnSubscribe(testTopics...)
+		},
+		unSubH: func() {
+			c.Destroy(true)
+		},
+	}
+
+	c = plainClient(t, extH)
 	testConn(c, t, afterConn)
 	c.Wait()
 
-	c = tlsClient()
+	c = tlsClient(t, extH)
 	testConn(c, t, afterConn)
+	c.Wait()
+}
+
+func TestClient_Reconnect(t *testing.T) {
+	c := plainClient(t, nil).(*client)
+	count := &atomic.Value{}
+	count.Store(0)
+	c.Connect(func(server string, code ConnAckCode, err error) {
+		if err != nil {
+			t.Log(err)
+			t.FailNow()
+		}
+
+		if code != ConnAccepted {
+			t.Log(code)
+			t.FailNow()
+		}
+
+		if count.Load().(int) < 3 {
+			c.conn.Range(func(key, value interface{}) bool {
+				v := value.(*connImpl)
+				v.conn.Close()
+				return true
+			})
+			count.Store(count.Load().(int) + 1)
+		} else {
+			c.Destroy(true)
+		}
+	})
 	c.Wait()
 }

@@ -136,4 +136,6 @@ const (
 	SubOkMaxQos1
 	// SubOkMaxQos2 QoS 2 is used by server
 	SubOkMaxQos2
+	// SubFail means that subscription is not successful
+	SubFail SubAckCode = 0x80
 )
