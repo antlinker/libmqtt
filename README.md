@@ -31,7 +31,7 @@ import "github.com/goiiot/libmqtt"
 
 3. Create a custom client
 
-If you would like to explore all the options avaliable, please refer to [godoc](https://godoc.org/github.com/goiiot/libmqtt)
+If you would like to explore all the options available, please refer to [godoc](https://godoc.org/github.com/goiiot/libmqtt)
 
 ```go
 client := libmqtt.NewClient(
@@ -44,11 +44,11 @@ client := libmqtt.NewClient(
 
 ```go
 // define your topic handlers like a golang http server
-client.Handle("SomeTopic", func(topic string, qos libmqtt.QosLevel, msg []byte) {
+client.Handle("foo", func(topic string, qos libmqtt.QosLevel, msg []byte) {
     // handle the topic message
 })
 
-client.Handle("ExampleTopic", func(topic string, qos libmqtt.QosLevel, msg []byte) {
+client.Handle("bar", func(topic string, qos libmqtt.QosLevel, msg []byte) {
     // handle the topic message
 })
 
@@ -70,15 +70,22 @@ client.Connect(func(server string, code libmqtt.ConnAckCode, err error) {
 
     // subscribe some topic(s)
     client.Subscribe(
-        &libmqtt.Topic{Name: "SomeTopic"},
-        &libmqtt.Topic{Name: "ExampleTopic", Qos: libmqtt.Qos1},
+        &libmqtt.Topic{Name: "foo"},
+        &libmqtt.Topic{Name: "bar", Qos: libmqtt.Qos1},
         // ...
     )
 
     // publish some topic message(s)
     client.Publish(
-        &libmqtt.PublishPacket{TopicName: "SomeTopic", Qos: libmqtt.Qos0, Payload: []byte("something bad")},
-        &libmqtt.PublishPacket{TopicName: "ExampleTopic", Qos: libmqtt.Qos1, Payload: []byte("something good")},
+        &libmqtt.PublishPacket{
+            TopicName: "foo",
+            Qos:       libmqtt.Qos0,
+            Payload:   []byte("foo data"),
+        }, &libmqtt.PublishPacket{
+            TopicName: "bar",
+            Qos:       libmqtt.Qos1,
+            Payload:   []byte("bar data"),
+        },
         // ...
     )
 })
