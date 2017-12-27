@@ -423,7 +423,7 @@ func (c *client) HandleUnSub(h UnSubHandler) {
 	c.uEH = h
 }
 
-// HandleNetError register handler for net error
+// HandleNet register handler for net error
 func (c *client) HandleNet(h NetHandler) {
 	c.nEH = h
 }

@@ -21,6 +21,13 @@ import (
 	"errors"
 )
 
+var (
+	// ErrTimeOut connection timeout error
+	ErrTimeOut = errors.New("connection timeout ")
+	// ErrBadPacket connection
+	ErrBadPacket = errors.New("connection decoded bad packet ")
+)
+
 // Packet is MQTT control packet
 type Packet interface {
 	// Type return the packet type
@@ -117,13 +124,6 @@ const (
 	ConnBadIdentity
 	// ConnAuthFail Auth failed
 	ConnAuthFail
-)
-
-var (
-	// ErrTimeOut connection timeout error
-	ErrTimeOut = errors.New("connection timeout ")
-	// ErrBadPacket connection
-	ErrBadPacket = errors.New("connection decoded bad packet ")
 )
 
 // SubAckCode is returned by server in SubAckPacket

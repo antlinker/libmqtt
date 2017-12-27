@@ -36,7 +36,7 @@ If you would like to explore all the options avaliable, please refer to [godoc](
 ```go
 client := libmqtt.NewClient(
     // server address(es)
-    WithServer("localhost:1883"),
+    libmqtt.WithServer("localhost:1883"),
 )
 ```
 
@@ -44,16 +44,16 @@ client := libmqtt.NewClient(
 
 ```go
 // define your topic handlers like a golang http server
-client.Handle("SomeTopic", func(topic string, qos QosLevel, msg []byte) {
+client.Handle("SomeTopic", func(topic string, qos libmqtt.QosLevel, msg []byte) {
     // handle the topic message
 })
 
-client.Handle("ExampleTopic", func(topic string, qos QosLevel, msg []byte) {
+client.Handle("ExampleTopic", func(topic string, qos libmqtt.QosLevel, msg []byte) {
     // handle the topic message
 })
 
 // connect to server
-client.Connect(func(server string, code ConnAckCode, err error) {
+client.Connect(func(server string, code libmqtt.ConnAckCode, err error) {
     if err != nil {
         // failed
         panic(err)
@@ -77,11 +77,17 @@ client.Connect(func(server string, code ConnAckCode, err error) {
 
     // publish some topic message(s)
     client.Publish(
-        &libmqtt.PublishPacket{TopicName: "SomeTopic", Qos: Qos0, Payload: []byte("something bad")},
-        &libmqtt.PublishPacket{TopicName: "ExampleTopic", Qos: Qos0, Payload: []byte("something good")},
+        &libmqtt.PublishPacket{TopicName: "SomeTopic", Qos: libmqtt.Qos0, Payload: []byte("something bad")},
+        &libmqtt.PublishPacket{TopicName: "ExampleTopic", Qos: libmqtt.Qos1, Payload: []byte("something good")},
         // ...
     )
 })
+```
+
+5. Unsubscribe topic(s)
+
+```go
+client.UnSubscribe("foo", "bar")
 ```
 
 ## TODO

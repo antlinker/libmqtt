@@ -1,7 +1,0 @@
-*.o
-*.out
-a.out
-conn_test
-pub_test
-sub_test
-ping_test

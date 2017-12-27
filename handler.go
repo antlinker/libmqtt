@@ -29,9 +29,11 @@ type ConnHandler func(server string, code ConnAckCode, err error)
 type TopicHandler func(topic string, qos QosLevel, msg []byte)
 
 // PubHandler handles the error occurred when publish some message
+// if err is not nil, that means a error occurred when sending pub msg
 type PubHandler func(topic string, err error)
 
 // SubHandler handles the error occurred when subscribe some topic
+// if err is not nil, that means a error occurred when sending sub msg
 type SubHandler func(topics []*Topic, err error)
 
 // UnSubHandler handles the error occurred when publish some message
