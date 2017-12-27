@@ -9,7 +9,7 @@ before_install:
   - sudo apt-get install -y curl lksctp-tools unzip
   - curl -fsSL http://emqtt.com/downloads/latest/ubuntu14_04 -o emqttd.zip
   - unzip emqttd.zip
-  - cd emqttd && ./bin/emqttd start
+  - cd emqttd && ./bin/emqttd start && cd ..
 
 script:
   - make test
