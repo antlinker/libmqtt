@@ -12,8 +12,8 @@ lib-archive:
 	env CGO_ENABLED=1 go build -buildmode=c-archive -ldflags=-s -o $(BUILD_DIR)/$(TARGET).a
 
 test: lib
-	$(MAKE) -C test test
+	$(MAKE) -C example example
 
 clean:
-	$(MAKE) -C test clean
+	$(MAKE) -C example clean
 	rm -rf $(BUILD_DIR)

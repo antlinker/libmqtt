@@ -15,11 +15,15 @@ MQTT 3.1.1 client lib with pure Go
 
 ## Usage
 
+### As a C lib
+
+Please refer to [c/README.md](https://github.com/goiiot/libmqtt/blob/master/c/README.md)
+
 ### As a Go lib
 
-1. Go get this package
+1. Go get this project
 
-```go
+```bash
 go get github.com/goiiot/libmqtt
 ```
 

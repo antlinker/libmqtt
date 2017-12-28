@@ -329,11 +329,7 @@ func (c *client) Handle(topic string, h TopicHandler) {
 
 // Connect to all designated server
 func (c *client) Connect(h ConnHandler) {
-	for _, s := range c.options.servers {
-		c.workers.Add(1)
-		go c.connect(s, h, 0)
-	}
-
+	lg.d("CLIENT connect to server, handler =", h)
 	go func() {
 		for pkt := range c.recvC {
 			c.router.Dispatch(pkt)
@@ -362,10 +358,16 @@ func (c *client) Connect(h ConnHandler) {
 			}
 		}
 	}()
+
+	for _, s := range c.options.servers {
+		c.workers.Add(1)
+		go c.connect(s, h, 0)
+	}
 }
 
 // Publish message(s) to topic(s), one to one
 func (c *client) Publish(msg ...*PublishPacket) {
+	lg.d("CLIENT publish, msg(s) =", msg)
 	for _, m := range msg {
 		if m.Qos > Qos2 {
 			m.Qos = Qos2
@@ -387,8 +389,7 @@ func (c *client) Publish(msg ...*PublishPacket) {
 
 // SubScribe topic(s)
 func (c *client) Subscribe(topics ...*Topic) {
-	// send sub message
-	lg.d("SEND subscribe, topic(s) =", topics)
+	lg.d("CLIENT subscribe, topic(s) =", topics)
 	s := &SubscribePacket{
 		Topics: topics,
 	}
@@ -398,11 +399,11 @@ func (c *client) Subscribe(topics ...*Topic) {
 
 // UnSubscribe topic(s)
 func (c *client) UnSubscribe(topics ...string) {
+	lg.d("CLIENT unsubscribe topic(s) =", topics)
 	for _, t := range topics {
 		c.subs.Delete(t)
 	}
 
-	lg.d("SEND UnSub, topic(s) =", topics)
 	u := &UnSubPacket{
 		TopicNames: topics,
 	}
@@ -418,6 +419,7 @@ func (c *client) Wait() {
 // Destroy will disconnect form all server
 // If force is true, then close connection without sending a DisConnPacket
 func (c *client) Destroy(force bool) {
+	lg.d("CLIENT destroying client with force =", force)
 	close(c.sendC)
 	c.options.bf = nil
 	if force {
@@ -433,21 +435,25 @@ func (c *client) Destroy(force bool) {
 
 // HandlePubMsg register handler for pub error
 func (c *client) HandlePub(h PubHandler) {
+	lg.d("CLIENT registered pub handler")
 	c.pEH = h
 }
 
 // HandleSubMsg register handler for extra sub info
 func (c *client) HandleSub(h SubHandler) {
+	lg.d("CLIENT registered sub handler")
 	c.sEH = h
 }
 
 // HandleUnSubMsg register handler for unsubscription error
 func (c *client) HandleUnSub(h UnSubHandler) {
+	lg.d("CLIENT registered unsub handler")
 	c.uEH = h
 }
 
 // HandleNet register handler for net error
 func (c *client) HandleNet(h NetHandler) {
+	lg.d("CLIENT registered net handler")
 	c.nEH = h
 }
 
@@ -461,16 +467,20 @@ func (c *client) connect(server string, h ConnHandler, triedTimes int) {
 		// with tls
 		conn, err = tls.DialWithDialer(&net.Dialer{Timeout: c.options.dialTimeout}, "tcp", server, c.options.tlsConfig)
 		if err != nil {
-			lg.e("connection with tls failed", err)
-			h(server, math.MaxUint8, err)
+			lg.e("CLIENT connect with tls failed, err =", err, "server =", server)
+			if h != nil {
+				h(server, math.MaxUint8, err)
+			}
 			return
 		}
 	} else {
 		// without tls
 		conn, err = net.DialTimeout("tcp", server, c.options.dialTimeout)
 		if err != nil {
-			lg.e("connection failed", err)
-			h(server, math.MaxUint8, err)
+			lg.e("CLIENT connect failed, err =", err, "server =", server)
+			if h != nil {
+				h(server, math.MaxUint8, err)
+			}
 			return
 		}
 	}
@@ -519,24 +529,34 @@ func (c *client) connect(server string, h ConnHandler, triedTimes int) {
 			if pkt.Type() == CtrlConnAck {
 				p := pkt.(*ConAckPacket)
 				if p.Code != ConnAccepted {
-					h(server, p.Code, nil)
+					if h != nil {
+						h(server, p.Code, nil)
+					}
 					return
 				}
 			} else {
-				h(server, math.MaxUint8, ErrBadPacket)
+				if h != nil {
+					h(server, math.MaxUint8, ErrBadPacket)
+				}
 				return
 			}
 		} else {
-			h(server, math.MaxUint8, ErrBadPacket)
+			if h != nil {
+				h(server, math.MaxUint8, ErrBadPacket)
+			}
 			return
 		}
 	case <-time.After(c.options.dialTimeout):
-		h(server, math.MaxUint8, ErrTimeOut)
+		if h != nil {
+			h(server, math.MaxUint8, ErrTimeOut)
+		}
 		return
 	}
 
-	lg.i("CONN success, connected server =", server)
-	go h(server, ConnAccepted, nil)
+	lg.i("CLIENT connected server =", server)
+	if h != nil {
+		go h(server, ConnAccepted, nil)
+	}
 
 	// login success, startLogic mqtt logic
 	c.conn.Store(server, connImpl)
@@ -545,17 +565,12 @@ func (c *client) connect(server string, h ConnHandler, triedTimes int) {
 	if c.options.bf != nil {
 		triedTimes++
 		c.workers.Add(1)
-		lg.w("CONN reconnect to server =", server, ", times =", triedTimes, ", delay =", int64(connImpl.reconDelay))
+		lg.w("CLIENT reconnect to server =", server, "seq =", triedTimes, "delay =", int64(connImpl.reconDelay))
 		go func() {
 			<-time.After(connImpl.reconDelay)
 			c.connect(server, h, triedTimes)
 		}()
 	}
-}
-
-// free packet id
-func (c *client) freeID(id uint16) {
-	c.idGen.free(id)
 }
 
 // connImpl is the wrapper of connection to server
