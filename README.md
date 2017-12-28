@@ -4,20 +4,24 @@
 
 MQTT 3.1.1 client lib with pure Go
 
-(and will be exported to C soon)
-
 ## Features
 
 1. A full functional MQTT 3.1.1 client (currently without session state storage)
 1. HTTP server like API
 1. Customizable TopicRouter (predefined `TextRouter`, `RegexRouter` and `RestRouter` in work)
-1. More efficient, idiomatic Go
+1. Command line app support (see [cmd](./cmd/))
+1. Exported to C lib (see [c](./c/))
+1. More efficient, idiomatic Go (maybe not quite idiomatic for now)
 
 ## Usage
 
 ### As a C lib
 
-Please refer to [c/README.md](https://github.com/goiiot/libmqtt/blob/master/c/README.md)
+Please refer to [c - README.md](./c/README.md)
+
+### As a command line client
+
+Please refer to [cmd - README.md](./cmd/README.md)
 
 ### As a Go lib
 
