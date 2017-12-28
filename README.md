@@ -15,13 +15,11 @@ MQTT 3.1.1 client lib with pure Go
 
 ## Usage
 
-### As a C lib
+This project can be used as
 
-Please refer to [c - README.md](./c/README.md)
-
-### As a command line client
-
-Please refer to [cmd - README.md](./cmd/README.md)
+- A [Go lib](#as-a-go-lib)
+- A [C lib](#as-a-c-lib)
+- A [Command line client](#as-a-command-line-client)
 
 ### As a Go lib
 
@@ -105,10 +103,18 @@ client.Connect(func(server string, code libmqtt.ConnAckCode, err error) {
 client.UnSubscribe("foo", "bar")
 ```
 
-## TODO
+### As a C lib
 
-1. persistant storage of session status
-1. full tested multiple connections in one client
-1. commandline app
-1. export to C, Java, Objective-C, Python...
-1. more efficient processing
+Please refer to [c - README.md](./c/README.md)
+
+### As a command line client
+
+Please refer to [cmd - README.md](./cmd/README.md)
+
+## RoadMap
+
+1. Persistant storage of session status (High priority)
+1. Full tested multiple connections in one client (High priority)
+1. More efficient processing (Medium priority)
+1. Add compatibility with mqtt 5.0 (Medium priority)
+1. Export to Java (JNI), Python (CPython), Objective-C... (Low priority)
