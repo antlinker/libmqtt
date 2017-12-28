@@ -11,10 +11,8 @@ before_install:
   - curl -fsSL http://emqtt.com/downloads/latest/ubuntu14_04 -o emqttd.zip
   - unzip emqttd.zip
 
-before_script:
+script:
   - cd emqttd
   - ./bin/emqttd start
   - cd ..
-
-script:
   - make test
