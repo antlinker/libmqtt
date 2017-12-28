@@ -20,6 +20,7 @@ import (
 	"bytes"
 	"crypto/tls"
 	"crypto/x509"
+	"errors"
 	"io/ioutil"
 	"math"
 	"net"
@@ -43,38 +44,41 @@ type BackoffOption struct {
 }
 
 // Option is client option for connection options
-type Option func(*client)
+type Option func(*client) error
 
 // WithCleanSession will set clean flag in connect packet
 func WithCleanSession(f bool) Option {
-	return func(c *client) {
+	return func(c *client) error {
 		c.options.cleanSession = f
+		return nil
 	}
 }
 
 // WithIdentity for username and password
 func WithIdentity(username, password string) Option {
-	return func(c *client) {
+	return func(c *client) error {
 		c.options.username = username
 		c.options.password = password
+		return nil
 	}
 }
 
 // WithKeepalive set the keepalive interval (time in second)
 func WithKeepalive(keepalive uint16, factor float64) Option {
-	return func(c *client) {
+	return func(c *client) error {
 		c.options.keepalive = time.Duration(keepalive) * time.Second
 		if factor > 1 {
 			c.options.keepaliveFactor = factor
 		} else {
 			factor = 1.2
 		}
+		return nil
 	}
 }
 
 // WithBackoffStrategy will set reconnect backoff strategy
 func WithBackoffStrategy(bf *BackoffOption) Option {
-	return func(c *client) {
+	return func(c *client) error {
 		if bf != nil {
 			if bf.FirstDelay < time.Millisecond {
 				bf.FirstDelay = time.Millisecond
@@ -87,24 +91,27 @@ func WithBackoffStrategy(bf *BackoffOption) Option {
 			}
 			c.options.bf = bf
 		}
+		return nil
 	}
 }
 
 // WithClientID set the client id for connection
 func WithClientID(clientID string) Option {
-	return func(c *client) {
+	return func(c *client) error {
 		c.options.clientID = clientID
+		return nil
 	}
 }
 
 // WithWill mark this connection as a will teller
 func WithWill(topic string, qos QosLevel, retain bool, payload []byte) Option {
-	return func(c *client) {
+	return func(c *client) error {
 		c.options.isWill = true
 		c.options.willTopic = topic
 		c.options.willQos = qos
 		c.options.willRetain = retain
 		c.options.willPayload = payload
+		return nil
 	}
 }
 
@@ -112,25 +119,26 @@ func WithWill(topic string, qos QosLevel, retain bool, payload []byte) Option {
 // Just use "ip:port" or "domain.name:port"
 // Only TCP connection supported for now
 func WithServer(servers ...string) Option {
-	return func(c *client) {
+	return func(c *client) error {
 		c.options.servers = servers
+		return nil
 	}
 }
 
 // WithTLS for client tls certification
 func WithTLS(certFile, keyFile string, caCert string, serverNameOverride string, skipVerify bool) Option {
-	return func(c *client) {
+	return func(c *client) error {
 		b, err := ioutil.ReadFile(caCert)
 		if err != nil {
-			panic("load ca cert file failed ")
+			return err
 		}
 		cp := x509.NewCertPool()
 		if !cp.AppendCertsFromPEM(b) {
-			panic("append certificates failed ")
+			return err
 		}
 		cert, err := tls.LoadX509KeyPair(certFile, keyFile)
 		if err != nil {
-			panic("load client cert file failed ")
+			return err
 		}
 
 		c.options.tlsConfig = &tls.Config{
@@ -139,67 +147,82 @@ func WithTLS(certFile, keyFile string, caCert string, serverNameOverride string,
 			ClientCAs:          cp,
 			ServerName:         serverNameOverride,
 		}
+		return nil
 	}
 }
 
 // WithDialTimeout for connection time out (time in second)
 func WithDialTimeout(timeout uint16) Option {
-	return func(c *client) {
+	return func(c *client) error {
 		c.options.dialTimeout = time.Duration(timeout) * time.Second
+		return nil
 	}
 }
 
 // WithSendBuf designate the channel size of send
 func WithSendBuf(size int) Option {
-	return func(c *client) {
+	return func(c *client) error {
 		if size < 1 {
 			size = 1
 		} else if size > 1024 {
 			size = 1024
 		}
 		c.options.sendChanSize = size
+		return nil
 	}
 }
 
 // WithRecvBuf designate the channel size of receive
 func WithRecvBuf(size int) Option {
-	return func(c *client) {
+	return func(c *client) error {
 		if size < 1 {
 			size = 1
 		} else if size > 1024 {
 			size = 1024
 		}
 		c.options.recvChanSize = size
+		return nil
 	}
 }
 
 // WithRouter set the router for topic dispatch
 func WithRouter(r TopicRouter) Option {
-	return func(c *client) {
+	return func(c *client) error {
 		if r != nil {
 			c.router = r
 		}
+		return nil
 	}
 }
 
 // WithLog will create basic logger for log
 func WithLog(l LogLevel) Option {
-	return func(c *client) {
+	return func(c *client) error {
 		lg = newLogger(l)
+		return nil
 	}
 }
 
 // NewClient will create a new mqtt client
-func NewClient(options ...Option) Client {
+func NewClient(options ...Option) (Client, error) {
 	c := defaultClient()
+
 	for _, o := range options {
-		o(c)
+		err := o(c)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	if len(c.options.servers) < 1 {
+		return nil, errors.New("no server provided, won't work ")
 	}
 
 	c.msgC = make(chan *message)
 	c.sendC = make(chan Packet, c.options.sendChanSize)
 	c.recvC = make(chan *PublishPacket, c.options.recvChanSize)
-	return c
+
+	return c, nil
 }
 
 // clientOptions is the options for client to connect, reconnect, disconnect
@@ -345,7 +368,7 @@ func (c *client) Connect(h ConnHandler) {
 func (c *client) Publish(msg ...*PublishPacket) {
 	for _, m := range msg {
 		if m.Qos > Qos2 {
-			panic("Invalid QoS level, should either be QoS0, QoS1 or QoS2 ")
+			m.Qos = Qos2
 		}
 
 		toSend := &PublishPacket{

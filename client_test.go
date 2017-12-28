@@ -47,7 +47,7 @@ type extraHandler struct {
 }
 
 func plainClient(t *testing.T, exH *extraHandler) Client {
-	c := NewClient(
+	c, err := NewClient(
 		WithServer("localhost:1883"),
 		WithDialTimeout(10),
 		WithKeepalive(10, 1.2),
@@ -55,12 +55,18 @@ func plainClient(t *testing.T, exH *extraHandler) Client {
 		WithWill("test", Qos0, false, []byte("test data")),
 		WithLog(Verbose),
 	)
+
+	if err != nil {
+		t.Log(err)
+		t.Log("create client failed")
+		t.FailNow()
+	}
 	initClient(c, exH, t)
 	return c
 }
 
 func tlsClient(t *testing.T, exH *extraHandler) Client {
-	c := NewClient(
+	c, err := NewClient(
 		WithServer("localhost:8883"),
 		WithTLS(
 			"./testdata/client-cert.pem",
@@ -74,6 +80,12 @@ func tlsClient(t *testing.T, exH *extraHandler) Client {
 		WithWill("test", Qos0, false, []byte("test data")),
 		WithLog(Verbose),
 	)
+
+	if err != nil {
+		t.Log(err)
+		t.Log("create client failed")
+		t.FailNow()
+	}
 	initClient(c, exH, t)
 	return c
 }
@@ -174,6 +186,27 @@ func testSub(c Client, t *testing.T) {
 		})
 	}
 	c.Subscribe(testSubs...)
+}
+
+func TestNewClient(t *testing.T) {
+	_, err := NewClient()
+	if err == nil {
+		t.Log("empty server not failed")
+		t.FailNow()
+	}
+
+	_, err = NewClient(
+		WithTLS(
+			"foo",
+			"bar",
+			"foobar",
+			"foo.bar",
+			true),
+	)
+	if err == nil {
+		t.Log("tls not failed")
+		t.FailNow()
+	}
 }
 
 // conn

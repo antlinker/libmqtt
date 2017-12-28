@@ -17,7 +17,6 @@
 package libmqtt
 
 import (
-	"bufio"
 	"bytes"
 	"testing"
 )
@@ -34,31 +33,68 @@ func TestDecodeRemainLength(t *testing.T) {
 }
 
 func TestDecodeOnePacket(t *testing.T) {
+	// MQTT packet should work
 	targetBytes := connWillBytes
 	buffer := &bytes.Buffer{}
-	_, err := buffer.Write(targetBytes)
-	if err != nil {
+	if _, err := buffer.Write(targetBytes); err != nil {
 		t.Log(err)
 		t.Fail()
-	}
-
-	reader := bufio.NewReader(buffer)
-	pkt, err := decodeOnePacket(reader)
-	if err != nil {
-		t.Log(err)
-		t.Fail()
-	}
-
-	buffer.Reset()
-	switch pkt.(type) {
-	case *ConPacket:
-		pkt.Bytes(buffer)
-		pktBytes := buffer.Bytes()
-		if bytes.Compare(pktBytes, targetBytes) != 0 {
-			t.Log(pktBytes)
+	} else {
+		pkt, err := decodeOnePacket(buffer)
+		if err != nil {
+			t.Log(err)
 			t.Fail()
 		}
-	default:
-		t.Fail()
+		buffer.Reset()
+		switch pkt.(type) {
+		case *ConPacket:
+			pkt.Bytes(buffer)
+			pktBytes := buffer.Bytes()
+			if bytes.Compare(pktBytes, targetBytes) != 0 {
+				t.Log(pktBytes)
+				t.Fail()
+			}
+		default:
+			t.Log(pkt)
+			t.Fail()
+		}
 	}
+
+	// malformed MQTT packets should fail
+	buffer.Reset()
+	malformedConnBytes := []byte{
+		0x10,                 // fixed header: conn:0
+		38,                   // remaining length: 38
+		0, 4, 77, 81, 84, 84, // Protocol Name: "MQTT"
+		4,     // Protocol Level 3.1.1
+		0xF6,  // connect flags: 11110110
+		0, 10, // keepalive: 10s
+		0, 4, 108, 111, 115, 116, // will topic: "lost"
+		0, 5, 112, 101, 97, 99, 101, // will msg: "peace"
+		// omit username field 0, 4, 117, 115, 101, 114, // Username: "user"
+		0, 4, 112, 97, 115, 115, // Password: "pass"
+		// another conn packet preventing EOF
+		0x10,                 // fixed header: conn:0
+		38,                   // remaining length: 38
+		0, 4, 77, 81, 84, 84, // Protocol Name: "MQTT"
+		4,     // Protocol Level 3.1.1
+		0xF6,  // connect flags: 11110110
+		0, 10, // keepalive: 10s
+		0, 4, 108, 111, 115, 116, // will topic: "lost"
+		0, 5, 112, 101, 97, 99, 101, // will msg: "peace"
+		0, 4, 117, 115, 101, 114, // Username: "user"
+		0, 4, 112, 97, 115, 115, // Password: "pass"
+	}
+	if _, err := buffer.Write(malformedConnBytes); err != nil {
+		t.Log(err)
+		t.Fail()
+	} else {
+		if _, err := decodeOnePacket(buffer); err == nil {
+			t.Log("decoded conn packet, should not happen")
+			t.Fail()
+		}
+	}
+
+	// none MQTT packet should fail
+
 }

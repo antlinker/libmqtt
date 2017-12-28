@@ -26,6 +26,7 @@ func decodeOnePacket(reader io.Reader) (pkt Packet, err error) {
 	if err != nil {
 		return
 	}
+
 	var bytesToRead int
 	bytesToRead, err = decodeRemainLength(reader)
 	if err != nil {
@@ -45,34 +46,43 @@ func decodeOnePacket(reader io.Reader) (pkt Packet, err error) {
 	}
 
 	header := headerBytes[0]
+	var next []byte
 	switch header >> 4 {
 	case CtrlConn:
-		protocol, next := decodeString(body)
+		var protocol string
+		protocol, next, err = decodeString(body)
+		if err != nil {
+			return
+		}
+
 		if len(next) < 2 {
 			err = ErrBadPacket
 			return
 		}
-		hasUsername := next[1]&0x80>>7 == 1
-		hasPassword := next[1]&0x40>>6 == 1
+		hasUsername := next[1]&0x80 == 0x80
+		hasPassword := next[1]&0x40 == 0x40
 		tmpPkt := &ConPacket{
 			protoName:    protocol,
 			protoLevel:   next[0],
-			CleanSession: next[1]&0x02>>1 == 1,
-			IsWill:       next[1]&0x04>>2 == 1,
+			CleanSession: next[1]&0x02 == 0x02,
+			IsWill:       next[1]&0x04 == 0x04,
 			WillQos:      next[1] & 0x18 >> 3,
-			WillRetain:   next[1]&0x20>>5 == 1,
+			WillRetain:   next[1]&0x20 == 0x20,
 			Keepalive:    uint16(next[2])<<8 + uint16(next[3]),
 		}
-		tmpPkt.ClientID, next = decodeString(next[4:])
+		if tmpPkt.ClientID, next, err = decodeString(next[4:]); err != nil {
+			return
+		}
+
 		if tmpPkt.IsWill {
-			tmpPkt.WillTopic, next = decodeString(next)
-			tmpPkt.WillMessage, next = decodeData(next)
+			tmpPkt.WillTopic, next, err = decodeString(next)
+			tmpPkt.WillMessage, next, err = decodeData(next)
 		}
 		if hasUsername {
-			tmpPkt.Username, next = decodeString(next)
+			tmpPkt.Username, next, err = decodeString(next)
 		}
 		if hasPassword {
-			tmpPkt.Password, _ = decodeString(next)
+			tmpPkt.Password, _, err = decodeString(next)
 		}
 		pkt = tmpPkt
 	case CtrlConnAck:
@@ -85,13 +95,17 @@ func decodeOnePacket(reader io.Reader) (pkt Packet, err error) {
 			Code:    body[1],
 		}
 	case CtrlPublish:
-		topicName, next := decodeString(body)
+		var topicName string
+		topicName, next, err = decodeString(body)
+		if err != nil {
+			return
+		}
 		if len(next) < 2 {
 			err = ErrBadPacket
 			return
 		}
 		tmpPkg := &PublishPacket{
-			IsDup:     header&0x08>>3 == 1,
+			IsDup:     header&0x08 == 0x08,
 			Qos:       header & 0x06 >> 1,
 			IsRetain:  header&0x01 == 1,
 			TopicName: topicName,
@@ -100,7 +114,7 @@ func decodeOnePacket(reader io.Reader) (pkt Packet, err error) {
 			tmpPkg.PacketID = uint16(next[0])<<8 + uint16(next[1])
 			next = next[2:]
 		}
-		tmpPkg.Payload = next[:]
+		tmpPkg.Payload = next
 		pkt = tmpPkg
 	case CtrlPubAck:
 		pkt = &PubAckPacket{
@@ -126,7 +140,10 @@ func decodeOnePacket(reader io.Reader) (pkt Packet, err error) {
 		topics := make([]*Topic, 0)
 		for len(next) > 0 {
 			var name string
-			name, next = decodeString(next)
+			name, next, err = decodeString(next)
+			if err != nil {
+				return
+			}
 			topics = append(topics, &Topic{Name: name, Qos: next[0]})
 			next = next[1:]
 		}
@@ -150,7 +167,10 @@ func decodeOnePacket(reader io.Reader) (pkt Packet, err error) {
 		topics := make([]string, 0)
 		for len(next) > 0 {
 			var name string
-			name, next = decodeString(next)
+			name, next, err = decodeString(next)
+			if err != nil {
+				return
+			}
 			topics = append(topics, name)
 		}
 		pktTmp.TopicNames = topics
@@ -169,20 +189,26 @@ func decodeOnePacket(reader io.Reader) (pkt Packet, err error) {
 	return
 }
 
-func decodeString(data []byte) (string, []byte) {
-	if len(data) < 2 {
-		return "", data
+func decodeString(data []byte) (d string, next []byte, err error) {
+	var b []byte
+	b, next, err = decodeData(data)
+	if err == nil {
+		d = string(b)
 	}
-	length := int(data[0])<<8 + int(data[1])
-	return string(data[2 : 2+length]), data[2+length:]
+
+	return
 }
 
-func decodeData(data []byte) ([]byte, []byte) {
+func decodeData(data []byte) (d []byte, next []byte, err error) {
 	if len(data) < 2 {
-		return nil, data
+		return nil, nil, ErrBadPacket
 	}
 	length := int(data[0])<<8 + int(data[1])
-	return data[2 : 2+length], data[2+length:]
+	if length+2 > len(data) {
+		// out of bounds
+		return nil, nil, ErrBadPacket
+	}
+	return data[2 : length+2], data[length+2:], nil
 }
 
 func decodeRemainLength(reader io.Reader) (result int, err error) {

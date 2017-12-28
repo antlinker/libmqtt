@@ -114,13 +114,19 @@ func SetWill(topic *C.char, qos C.int, retain C.bool, payload *C.char, payloadSi
 }
 
 //export SetUp
-func SetUp() {
-	client = mq.NewClient(options...)
+func SetUp() *C.char {
+	var err error
+	client, err = mq.NewClient(options...)
+	if err != nil {
+		return C.CString(err.Error())
+	}
 
 	client.HandlePub(callPubHandler)
 	client.HandleSub(callSubHandler)
 	client.HandleUnSub(callUnSubHandler)
 	client.HandleNet(callNetHandler)
+
+	return nil
 }
 
 //export Conn
