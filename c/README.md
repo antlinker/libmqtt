@@ -73,4 +73,4 @@ Conn();
 Wait();
 ```
 
-You can refer to the [example](./c/) for a full usage example
+You can refer to the [example](./example/) for a full usage example
