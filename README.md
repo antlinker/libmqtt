@@ -158,7 +158,7 @@ If you would like to apply other routing strategy to the client, you can provide
 ```go
 client, err := NewClient(
     // for example, use `RegexRouter`
-    libmqtt.WithRouter(NewRegexRouter()),
+    libmqtt.WithRouter(libmqtt.NewRegexRouter()),
 )
 ```
 

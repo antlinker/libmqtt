@@ -6,14 +6,8 @@
 
 3. Run your mqtt server, and modify the `example.c` accordingly
 
-2. Make the example
+4. Build and run the example
 
 ```bash
-make
-```
-
-3. Run example
-
-```bash
-make run
+make && make run
 ```

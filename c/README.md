@@ -4,7 +4,7 @@ A MQTT C client library exported from libmqtt
 
 ## Temporary Restrictions
 
-1. Only one client, and one connection per client supported
+1. Only one client, and only one connection per client supported
 
 ## Build
 
