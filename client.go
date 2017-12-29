@@ -444,11 +444,15 @@ func (c *client) Destroy(force bool) {
 	if force {
 		c.conn.Range(func(k, v interface{}) bool {
 			va := v.(*connImpl)
-			va.close()
+			va.conn.Close()
 			return true
 		})
 	} else {
-
+		c.conn.Range(func(k, v interface{}) bool {
+			va := v.(*connImpl)
+			va.close()
+			return true
+		})
 	}
 }
 
@@ -748,7 +752,6 @@ func (c *connImpl) startLogic() {
 // keepalive with server
 func (c *connImpl) keepalive() {
 	lg.d("NET start keepalive")
-	defer lg.d("NET stop keepalive")
 
 	t := time.NewTicker(c.parent.options.keepalive)
 	defer t.Stop()
@@ -769,13 +772,14 @@ func (c *connImpl) keepalive() {
 			return
 		}
 	}
+
+	lg.d("NET stop keepalive")
 }
 
 // close this connection
 func (c *connImpl) close() {
 	lg.i("NET connection to server closed, remote =", c.name)
 	c.send(DisConPacket)
-	c.conn.Close()
 }
 
 // handle client message send
@@ -833,6 +837,7 @@ func (c *connImpl) handleLogicSend() {
 		case CtrlPubComp:
 			c.parent.persist.Delete(sendKey(pkt.(*PubCompPacket).PacketID))
 		case CtrlDisConn:
+			c.conn.Close()
 			break
 		}
 	}
