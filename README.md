@@ -12,11 +12,11 @@ MQTT 3.1.1 client lib with pure Go
 
 ## Features
 
-1. A full functional MQTT 3.1.1 client (currently only with in memory session state storage)
-1. HTTP server like API
-1. Customizable TopicRouter (predefined `TextRouter`, `RegexRouter` and `RestRouter` under work)
+1. A full functional MQTT 3.1.1 client. (currently only with in memory session state storage)
+1. HTTP like API.
+1. Customizable TopicRouter. (see [Topic Routing](#topic-routing))
 1. Command line app support (see [cmd](./cmd/))
-1. Exported to C lib (see [c](./c/))
+1. C lib support (see [c](./c/))
 1. More efficient, idiomatic Go (maybe not quite idiomatic for now)
 
 ## Usage
@@ -124,13 +124,13 @@ client.Connect(func(server string, code libmqtt.ConnAckCode, err error) {
 })
 ```
 
-5. Unsubscribe topic(s)
+5. Unsubscribe topic(s).
 
 ```go
 client.UnSubscribe("foo", "bar")
 ```
 
-6. Destroy the client when you would like to
+6. Destroy the client when you would like to.
 
 ```go
 // passing true to Destroy means a immediate disconnect to server
@@ -140,18 +140,18 @@ client.Destroy(true)
 
 ### As a C lib
 
-Please refer to [c - README.md](./c/README.md)
+Please refer to [c - README.md](./c/README.md).
 
 ### As a command line client
 
-Please refer to [cmd - README.md](./cmd/README.md)
+Please refer to [cmd - README.md](./cmd/README.md).
 
 ## Topic Routing
 
-Routing topics is one of the most important thing when it comes to business logics, we currently has built two `TopicRouter`s ready to use, they are `TextRouter` and `RegexRouter`
+Routing topics is one of the most important thing when it comes to business logics, we currently have built two `TopicRouter`s which is ready to use, they are `TextRouter` and `RegexRouter`.
 
-- `TextRouter` will match the exact same topic which was registered to client by `Handle` method. (Default router in a client)
-- `RegexRouter` will go through all the registered topic handlers, and use regular expression to test whether that is matched and should dispatch to that handler
+- `TextRouter` will match the exact same topic which was registered to client by `Handle` method. (this is the default router in a client).
+- `RegexRouter` will go through all the registered topic handlers, and use regular expression to test whether that is matched and should dispatch to the handler.
 
 If you would like to apply other routing strategy to the client, you can provide this option when creating the client
 
@@ -164,8 +164,8 @@ client, err := NewClient(
 
 ## RoadMap
 
-1. File persist storage of session status (High priority)
-1. Full tested multiple connections in one client (High priority)
-1. More efficient processing (Medium priority)
-1. Add compatibility with mqtt 5.0 (Medium priority)
+1. File persist storage of session status. (High priority)
+1. Full tested multiple connections in one client. (High priority)
+1. More efficient processing. (Medium priority)
+1. Add compatibility with mqtt 5.0 . (Medium priority)
 1. Export to Java (JNI), Python (CPython), Objective-C... (Low priority)
