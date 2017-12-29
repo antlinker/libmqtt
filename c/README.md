@@ -32,13 +32,21 @@ make
 
 ## Usage
 
+0. Include the predefined header `libmqtth.h` and generated header `libmqtt.h`
+
+```c
+#include "libmqtth.h"
+#include "libmqtt.h"
+```
+
 1. Configure the client
 
 ```c
-SetServer(SERVER);              // required, or client will not work
+SetServer("localhost:1883");    // required, or client will not work
 SetLog(libmqtt_log_verbose);    // open log as you wish
 SetCleanSession(true);          // clean seesion mark
 SetKeepalive(10, 1.2);          // set keepalive options
+// other options provided by libmqtt are also avalieble here
 ```
 
 2. Setup the client
@@ -63,7 +71,7 @@ Handle("foo", &topic_handler);
 // ...
 ```
 
-4. Connect to server and wait for close
+4. Connect to server and wait for connection close
 
 ```c
 // connect to server with

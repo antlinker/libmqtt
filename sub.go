@@ -21,7 +21,7 @@ import "bytes"
 // SubscribePacket is sent from the Client to the Server
 // to create one or more Subscriptions.
 //
-// Each Subscription registers a Client’s interest in one or more TopicNames.
+// Each Subscription registers a Client’strategy interest in one or more TopicNames.
 // The Server sends PublishPackets to the Client in order to forward
 // Application Messages that were published to TopicNames that match these Subscriptions.
 // The SubscribePacket also specifies (for each Subscription)
@@ -31,7 +31,7 @@ type SubscribePacket struct {
 	Topics   []*Topic
 }
 
-// Type SubscribePacket's type is CtrlSubscribe
+// Type SubscribePacket'strategy type is CtrlSubscribe
 func (s *SubscribePacket) Type() CtrlType {
 	return CtrlSubscribe
 }
@@ -81,7 +81,7 @@ type SubAckPacket struct {
 	Codes    []SubAckCode
 }
 
-// Type SubAckPacket's type is CtrlSubAck
+// Type SubAckPacket'strategy type is CtrlSubAck
 func (s *SubAckPacket) Type() CtrlType {
 	return CtrlSubAck
 }
@@ -122,7 +122,7 @@ type UnSubPacket struct {
 	TopicNames []string
 }
 
-// Type UnSubPacket's type is CtrlUnSub
+// Type UnSubPacket'strategy type is CtrlUnSub
 func (s *UnSubPacket) Type() CtrlType {
 	return CtrlUnSub
 }
@@ -164,7 +164,7 @@ type UnSubAckPacket struct {
 	PacketID uint16
 }
 
-// Type UnSubAckPacket's type is CtrlUnSubAck
+// Type UnSubAckPacket'strategy type is CtrlUnSubAck
 func (s *UnSubAckPacket) Type() CtrlType {
 	return CtrlUnSubAck
 }

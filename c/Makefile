@@ -1,7 +1,7 @@
 BUILD_DIR := build
 TARGET := libmqtt
 
-.PHONY: lib clean test lib-shared lib-archive
+.PHONY: lib clean example lib-shared lib-archive
 
 lib: lib-shared lib-archive
 
@@ -11,8 +11,8 @@ lib-shared:
 lib-archive:
 	env CGO_ENABLED=1 go build -buildmode=c-archive -ldflags=-s -o $(BUILD_DIR)/$(TARGET).a
 
-test: lib
-	$(MAKE) -C example example
+example: lib
+	$(MAKE) -C example build
 
 clean:
 	$(MAKE) -C example clean

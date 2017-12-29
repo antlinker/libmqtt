@@ -91,16 +91,14 @@ func tlsClient(t *testing.T, exH *extraHandler) Client {
 }
 
 func initClient(c Client, exH *extraHandler, t *testing.T) {
-	pubCount := &atomic.Value{}
-	pubCount.Store(0)
+	var pubCount uint32
 	c.HandlePub(func(topic string, err error) {
 		if err != nil {
 			t.Log("pub failed, err =", err)
 			t.FailNow()
 		}
-
-		pubCount.Store(pubCount.Load().(int) + 1)
-		if pubCount.Load().(int) == len(testMsgs) {
+		atomic.AddUint32(&pubCount, 1)
+		if atomic.LoadUint32(&pubCount) == uint32(len(testMsgs)) {
 			if exH != nil && exH.pubH != nil {
 				exH.pubH()
 			}
@@ -160,11 +158,10 @@ func testConn(c Client, t *testing.T, afterConn func()) {
 }
 
 func testSub(c Client, t *testing.T) {
-	count := atomic.Value{}
-	count.Store(int(0))
-	N := len(testMsgs)
+	var count uint32
+	N := uint32(len(testMsgs))
 	for index, value := range testMsgs {
-		i := index
+		i := uint32(index)
 		v := value
 		c.Handle(v.TopicName, func(topic string, maxQos SubAckCode, msg []byte) {
 			if maxQos != v.Qos || bytes.Compare(v.Payload, msg) != 0 {
@@ -174,11 +171,11 @@ func testSub(c Client, t *testing.T) {
 				)
 				t.FailNow()
 			} else {
-				count.Store(count.Load().(int) + 1)
+				atomic.AddUint32(&count, 1)
 			}
 
 			if i == N-1 {
-				if c := count.Load().(int); c != N {
+				if atomic.LoadUint32(&count) != N {
 					t.Log("sub recv count =", c)
 					t.FailNow()
 				}

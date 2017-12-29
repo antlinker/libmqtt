@@ -15,6 +15,11 @@ type TopicRouter interface {
 	Dispatch(p *PublishPacket)
 }
 
+// NewRegexRouter will create a regex router
+func NewRegexRouter() *RegexRouter {
+	return &RegexRouter{m: &sync.Map{}}
+}
+
 // RegexRouter use regex to match topic messages
 type RegexRouter struct {
 	m *sync.Map
@@ -47,6 +52,11 @@ func (r *RegexRouter) Dispatch(p *PublishPacket) {
 		}
 		return true
 	})
+}
+
+// NewTextRouter will create a text based router
+func NewTextRouter() *TextRouter {
+	return &TextRouter{m: &sync.Map{}}
 }
 
 // TextRouter uses plain string comparison to dispatch topic message

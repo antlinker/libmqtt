@@ -1,6 +1,8 @@
 #ifndef _LIB_MQTT_H_
 #define _LIB_MQTT_H_
 
+typedef int libmqtt_client_id;
+
 typedef enum {
   libmqtt_connack_accepted = 0,
   libmqtt_connack_bad_proto = 1,

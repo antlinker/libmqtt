@@ -53,31 +53,17 @@ func execCmd(args []string) {
 	args = args[1:]
 	ok := false
 	switch cmd {
-	case "c":
-		fallthrough
-	case "conn":
+	case "c", "conn":
 		ok = execConn(args)
-	case "p":
-		fallthrough
-	case "pub":
+	case "p", "pub":
 		ok = execPub(args)
-	case "s":
-		fallthrough
-	case "sub":
+	case "s", "sub":
 		ok = execSub(args)
-	case "u":
-		fallthrough
-	case "unsub":
+	case "u", "unsub":
 		ok = execUnSub(args)
-	case "q":
-		fallthrough
-	case "exit":
+	case "q", "exit":
 		ok = execDisConn(args)
-	case "?":
-		fallthrough
-	case "h":
-		fallthrough
-	case "help":
+	case "?", "h", "help":
 		ok = usage()
 	}
 

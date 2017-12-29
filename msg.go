@@ -7,6 +7,7 @@ const (
 	subMsg
 	unSubMsg
 	netMsg
+	persistMsg
 )
 
 type message struct {
@@ -45,6 +46,13 @@ func newNetMsg(server string, err error) *message {
 	return &message{
 		what: netMsg,
 		msg:  server,
+		err:  err,
+	}
+}
+
+func newPersistMsg(err error) *message {
+	return &message{
+		what: persistMsg,
 		err:  err,
 	}
 }

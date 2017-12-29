@@ -46,6 +46,16 @@ type BackoffOption struct {
 // Option is client option for connection options
 type Option func(*client) error
 
+// WithPersist defines the persist method to be used
+func WithPersist(method PersistMethod) Option {
+	return func(c *client) error {
+		if method != nil {
+			c.persist = method
+		}
+		return nil
+	}
+}
+
 // WithCleanSession will set clean flag in connect packet
 func WithCleanSession(f bool) Option {
 	return func(c *client) error {
@@ -275,6 +285,7 @@ type Client interface {
 	HandleSub(SubHandler)
 	HandleUnSub(UnSubHandler)
 	HandleNet(NetHandler)
+	HandlePersist(PersistHandler)
 }
 
 type client struct {
@@ -287,12 +298,14 @@ type client struct {
 	idGen   *idGenerator        // sorted in use packetId []uint16
 	router  TopicRouter         // topic router
 	workers *sync.WaitGroup     // workers
+	persist PersistMethod       // persist method
 
-	// handlers
-	pEH PubHandler
-	sEH SubHandler
-	uEH UnSubHandler
-	nEH NetHandler
+	// error handlers
+	pH  PubHandler
+	sH  SubHandler
+	uH  UnSubHandler
+	nH  NetHandler
+	psH PersistHandler
 }
 
 // defaultClient create the client with default options
@@ -310,11 +323,12 @@ func defaultClient() *client {
 			keepalive:       2 * time.Minute,  // default keepalive interval is 2min
 			keepaliveFactor: 1.5,              // default reasonable amount of time 3min
 		},
-		router:  &TextRouter{},
+		router:  NewTextRouter(),
 		subs:    &sync.Map{},
 		conn:    &sync.Map{},
 		idGen:   newIDGenerator(),
 		workers: &sync.WaitGroup{},
+		persist: NewMemPersist(DefaultPersistStrategy()),
 	}
 	return c
 }
@@ -340,20 +354,24 @@ func (c *client) Connect(h ConnHandler) {
 		for e := range c.msgC {
 			switch e.what {
 			case pubMsg:
-				if c.pEH != nil {
-					c.pEH(e.msg, e.err)
+				if c.pH != nil {
+					c.pH(e.msg, e.err)
 				}
 			case subMsg:
-				if c.sEH != nil {
-					c.sEH(e.obj.([]*Topic), e.err)
+				if c.sH != nil {
+					c.sH(e.obj.([]*Topic), e.err)
 				}
 			case unSubMsg:
-				if c.uEH != nil {
-					c.uEH(e.obj.([]string), e.err)
+				if c.uH != nil {
+					c.uH(e.obj.([]string), e.err)
 				}
 			case netMsg:
-				if c.nEH != nil {
-					c.nEH(e.msg, e.err)
+				if c.nH != nil {
+					c.nH(e.msg, e.err)
+				}
+			case persistMsg:
+				if c.psH != nil {
+					c.psH(e.err)
 				}
 			}
 		}
@@ -413,6 +431,7 @@ func (c *client) UnSubscribe(topics ...string) {
 
 // Wait will wait for all connection to exit
 func (c *client) Wait() {
+	lg.i("CLIENT wait for all connections")
 	c.workers.Wait()
 }
 
@@ -436,28 +455,34 @@ func (c *client) Destroy(force bool) {
 // HandlePubMsg register handler for pub error
 func (c *client) HandlePub(h PubHandler) {
 	lg.d("CLIENT registered pub handler")
-	c.pEH = h
+	c.pH = h
 }
 
 // HandleSubMsg register handler for extra sub info
 func (c *client) HandleSub(h SubHandler) {
 	lg.d("CLIENT registered sub handler")
-	c.sEH = h
+	c.sH = h
 }
 
 // HandleUnSubMsg register handler for unsubscription error
 func (c *client) HandleUnSub(h UnSubHandler) {
 	lg.d("CLIENT registered unsub handler")
-	c.uEH = h
+	c.uH = h
 }
 
 // HandleNet register handler for net error
 func (c *client) HandleNet(h NetHandler) {
 	lg.d("CLIENT registered net handler")
-	c.nEH = h
+	c.nH = h
 }
 
-// connect to one server and startLogic mqtt logic
+// HandleNet register handler for net error
+func (c *client) HandlePersist(h PersistHandler) {
+	lg.d("CLIENT registered persist handler")
+	c.psH = h
+}
+
+// connect to one server and start mqtt logic
 func (c *client) connect(server string, h ConnHandler, triedTimes int) {
 	defer c.workers.Done()
 	var conn net.Conn
@@ -598,7 +623,7 @@ func (c *connImpl) startLogic() {
 		switch pkt.Type() {
 		case CtrlSubAck:
 			p := pkt.(*SubAckPacket)
-			lg.d("RECV SubAck, id =", p.PacketID)
+			lg.d("NET received SubAck, id =", p.PacketID)
 
 			if originPkt, ok := c.parent.idGen.getExtra(p.PacketID); ok {
 				switch originPkt.(type) {
@@ -612,11 +637,13 @@ func (c *connImpl) startLogic() {
 					}
 					c.parent.msgC <- newSubMsg(originSub.Topics, nil)
 					c.parent.idGen.free(p.PacketID)
+
+					c.parent.persist.Delete(sendKey(p.PacketID))
 				}
 			}
 		case CtrlUnSubAck:
 			p := pkt.(*UnSubAckPacket)
-			lg.d("RECV UnSubAck, id =", p.PacketID)
+			lg.d("NET received UnSubAck, id =", p.PacketID)
 
 			if originPkt, ok := c.parent.idGen.getExtra(p.PacketID); ok {
 				switch originPkt.(type) {
@@ -624,26 +651,32 @@ func (c *connImpl) startLogic() {
 					originUnSub := originPkt.(*UnSubPacket)
 					c.parent.msgC <- newUnSubMsg(originUnSub.TopicNames, nil)
 					c.parent.idGen.free(p.PacketID)
+
+					c.parent.persist.Delete(sendKey(p.PacketID))
 				}
 			}
 		case CtrlPublish:
 			p := pkt.(*PublishPacket)
-			lg.d("RECV Publish, id =", p.PacketID, "QoS =", p.Qos)
+			lg.d("NET received publish, id =", p.PacketID, "QoS =", p.Qos)
 			// received server publish, send to client
 			c.parent.recvC <- p
 
 			// tend to QoS
 			switch p.Qos {
 			case Qos1:
-				lg.d("SEND PubAck for Publish, id =", p.PacketID)
+				lg.d("NET send PubAck for Publish, id =", p.PacketID)
 				c.send(&PubAckPacket{PacketID: p.PacketID})
+
+				c.parent.persist.Store(recvKey(p.PacketID), pkt)
 			case Qos2:
-				lg.d("SEND PubRecv for Publish, id =", p.PacketID)
+				lg.d("NET send PubRecv for Publish, id =", p.PacketID)
 				c.send(&PubRecvPacket{PacketID: p.PacketID})
+
+				c.parent.persist.Store(recvKey(p.PacketID), pkt)
 			}
 		case CtrlPubAck:
 			p := pkt.(*PubAckPacket)
-			lg.d("RECV PubAck, id =", p.PacketID)
+			lg.d("NET received PubAck, id =", p.PacketID)
 
 			if originPkt, ok := c.parent.idGen.getExtra(p.PacketID); ok {
 				switch originPkt.(type) {
@@ -652,12 +685,14 @@ func (c *connImpl) startLogic() {
 					if originPub.Qos == Qos1 {
 						c.parent.msgC <- newPubMsg(originPub.TopicName, nil)
 						c.parent.idGen.free(p.PacketID)
+
+						c.parent.persist.Delete(sendKey(p.PacketID))
 					}
 				}
 			}
 		case CtrlPubRecv:
 			p := pkt.(*PubRecvPacket)
-			lg.d("RECV PubRec, id =", p.PacketID)
+			lg.d("NET received PubRec, id =", p.PacketID)
 
 			if originPkt, ok := c.parent.idGen.getExtra(p.PacketID); ok {
 				switch originPkt.(type) {
@@ -665,13 +700,13 @@ func (c *connImpl) startLogic() {
 					originPub := originPkt.(*PublishPacket)
 					if originPub.Qos == Qos2 {
 						c.send(&PubRelPacket{PacketID: p.PacketID})
-						lg.d("SEND PubRel, id =", p.PacketID)
+						lg.d("NET send PubRel, id =", p.PacketID)
 					}
 				}
 			}
 		case CtrlPubRel:
 			p := pkt.(*PubRelPacket)
-			lg.d("RECV PubRel, id =", p.PacketID)
+			lg.d("NET send PubRel, id =", p.PacketID)
 
 			if originPkt, ok := c.parent.idGen.getExtra(p.PacketID); ok {
 				switch originPkt.(type) {
@@ -679,13 +714,15 @@ func (c *connImpl) startLogic() {
 					originPub := originPkt.(*PublishPacket)
 					if originPub.Qos == Qos2 {
 						c.send(&PubCompPacket{PacketID: p.PacketID})
-						lg.d("SEND PubComp, id =", p.PacketID)
+						lg.d("NET send PubComp, id =", p.PacketID)
+
+						c.parent.persist.Store(recvKey(p.PacketID), pkt)
 					}
 				}
 			}
 		case CtrlPubComp:
 			p := pkt.(*PubCompPacket)
-			lg.d("RECV PubComp id =", p.PacketID)
+			lg.d("NET received PubComp, id =", p.PacketID)
 
 			if originPkt, ok := c.parent.idGen.getExtra(p.PacketID); ok {
 				switch originPkt.(type) {
@@ -693,23 +730,25 @@ func (c *connImpl) startLogic() {
 					originPub := originPkt.(*PublishPacket)
 					if originPub.Qos == Qos2 {
 						c.send(&PubRelPacket{PacketID: p.PacketID})
-						lg.d("SEND PubRel, id =", p.PacketID)
+						lg.d("NET send PubRel, id =", p.PacketID)
 
 						c.parent.msgC <- newPubMsg(originPub.TopicName, nil)
 						c.parent.idGen.free(p.PacketID)
+
+						c.parent.persist.Delete(sendKey(p.PacketID))
 					}
 				}
 			}
 		default:
-			lg.d("RECV packet, type =", pkt.Type())
+			lg.d("NET received packet, type =", pkt.Type())
 		}
 	}
 }
 
 // keepalive with server
 func (c *connImpl) keepalive() {
-	lg.d("START keepalive")
-	defer lg.d("END keepalive")
+	lg.d("NET start keepalive")
+	defer lg.d("NET stop keepalive")
 
 	t := time.NewTicker(c.parent.options.keepalive)
 	defer t.Stop()
@@ -723,6 +762,7 @@ func (c *connImpl) keepalive() {
 				return
 			}
 		case <-time.After(c.parent.options.keepalive * time.Duration(c.parent.options.keepaliveFactor)):
+			lg.i("NET keepalive timeout")
 			// ping timeout
 			t.Stop()
 			c.conn.Close()
@@ -733,7 +773,7 @@ func (c *connImpl) keepalive() {
 
 // close this connection
 func (c *connImpl) close() {
-	lg.i("END connection, server =", c.name)
+	lg.i("NET connection to server closed, remote =", c.name)
 	c.send(DisConPacket)
 	c.conn.Close()
 }
@@ -743,6 +783,7 @@ func (c *connImpl) handleClientSend() {
 	for pkt := range c.parent.sendC {
 		pkt.Bytes(c.sendBuf)
 		if _, err := c.sendBuf.WriteTo(c.conn); err != nil {
+			// DO NOT NOTIFY net err HERE
 			// ALWAYS DETECT net err in receive
 			switch pkt.Type() {
 			case CtrlPublish:
@@ -754,12 +795,19 @@ func (c *connImpl) handleClientSend() {
 			}
 			break
 		}
+
 		switch pkt.Type() {
 		case CtrlPublish:
 			pub := pkt.(*PublishPacket)
 			if pub.Qos == Qos0 {
 				c.parent.msgC <- newPubMsg(pkt.(*PublishPacket).TopicName, nil)
+			} else {
+				c.parent.persist.Store(sendKey(pub.PacketID), pkt)
 			}
+		case CtrlSubscribe:
+			c.parent.persist.Store(sendKey(pkt.(*SubscribePacket).PacketID), pkt)
+		case CtrlUnSub:
+			c.parent.persist.Store(sendKey(pkt.(*UnSubPacket).PacketID), pkt)
 		case CtrlDisConn:
 			// disconnect to server
 			break
@@ -772,33 +820,40 @@ func (c *connImpl) handleLogicSend() {
 	for pkt := range c.sendC {
 		pkt.Bytes(c.sendBuf)
 		if _, err := c.sendBuf.WriteTo(c.conn); err != nil {
+			// DO NOT NOTIFY net err HERE
 			// ALWAYS DETECT net err in receive
 			break
 		}
 
-		if pkt.Type() == CtrlDisConn {
-			// disconnect to server
+		switch pkt.Type() {
+		case CtrlPubRel:
+			c.parent.persist.Store(sendKey(pkt.(*PubRelPacket).PacketID), pkt)
+		case CtrlPubAck:
+			c.parent.persist.Delete(sendKey(pkt.(*PubAckPacket).PacketID))
+		case CtrlPubComp:
+			c.parent.persist.Delete(sendKey(pkt.(*PubCompPacket).PacketID))
+		case CtrlDisConn:
 			break
 		}
 	}
 }
 
-// handle all message recv
+// handle all message receive
 func (c *connImpl) handleRecv() {
 	for {
 		pkt, err := decodeOnePacket(c.conn)
 		if err != nil {
-			lg.e("CONN broken", "server =", c.name, "err =", err)
+			lg.e("NET connection broken", "server =", c.name, "err =", err)
 			close(c.recvC)
 			close(c.keepaliveC)
 			// TODO send proper net error to net handler
-			// c.parent.msgC <- newNetMsg(c.name, err)
+			// count.parent.msgC <- newNetMsg(count.name, err)
 			break
 		}
 
 		// pass packets
 		if pkt == PingRespPacket {
-			lg.d("RECV keepalive message")
+			lg.d("NET received keepalive message")
 			c.keepaliveC <- 1
 		} else {
 			c.recvC <- pkt

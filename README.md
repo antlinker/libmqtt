@@ -4,11 +4,17 @@
 
 MQTT 3.1.1 client lib with pure Go
 
+## Contents
+
+- [Features](#features)
+- [Usage](#usage)
+- [Topic Routing](#topic-routing)
+
 ## Features
 
-1. A full functional MQTT 3.1.1 client (currently without session state storage)
+1. A full functional MQTT 3.1.1 client (currently only with in memory session state storage)
 1. HTTP server like API
-1. Customizable TopicRouter (predefined `TextRouter`, `RegexRouter` and `RestRouter` in work)
+1. Customizable TopicRouter (predefined `TextRouter`, `RegexRouter` and `RestRouter` under work)
 1. Command line app support (see [cmd](./cmd/))
 1. Exported to C lib (see [c](./c/))
 1. More efficient, idiomatic Go (maybe not quite idiomatic for now)
@@ -37,18 +43,38 @@ import "github.com/goiiot/libmqtt"
 
 3. Create a custom client
 
-If you would like to explore all the options available, please refer to [godoc](https://godoc.org/github.com/goiiot/libmqtt)
-
 ```go
-client := libmqtt.NewClient(
+client, err := libmqtt.NewClient(
     // server address(es)
     libmqtt.WithServer("localhost:1883"),
 )
+if err != nil {
+    // handle client creation error
+}
 ```
+
+Notice: If you would like to explore all the options available, please refer to [godoc#Option](https://godoc.org/github.com/goiiot/libmqtt#Option)
 
 4. Register the handlers and Connect, then you are ready to pub/sub with server
 
+We recommend you to register handlers for pub, sub, unsub, net error and persist error, for they can provide you more controllability of the lifecycle of a MQTT client
+
 ```go
+// register handler for pub success/fail (optional, but recommended)
+client.HandlePub(PubHandler)
+
+// register handler for sub success/fail (optional, but recommended)
+client.HandleSub(SubHandler)
+
+// register handler for unsub success/fail (optional, but recommended)
+client.HandleUnSub(UnSubHandler)
+
+// register handler for net error (optional, but recommended)
+client.HandleNet(NetHandler)
+
+// register handler for persist error (optional, but recommended)
+client.HandlePersist(PersistHandler)
+
 // define your topic handlers like a golang http server
 client.Handle("foo", func(topic string, qos libmqtt.QosLevel, msg []byte) {
     // handle the topic message
@@ -72,6 +98,7 @@ client.Connect(func(server string, code libmqtt.ConnAckCode, err error) {
 
     // success
     // you are now connected to the `server`
+    // (the `server` is one of you have provided `servers` when create the client)
     // start your business logic here or send a signal to your logic to start
 
     // subscribe some topic(s)
@@ -103,6 +130,14 @@ client.Connect(func(server string, code libmqtt.ConnAckCode, err error) {
 client.UnSubscribe("foo", "bar")
 ```
 
+6. Destroy the client when you would like to
+
+```go
+// passing true to Destroy means a immediate disconnect to server
+// while passing false will try to send a DisConn packet to server
+client.Destroy(true)
+```
+
 ### As a C lib
 
 Please refer to [c - README.md](./c/README.md)
@@ -111,9 +146,25 @@ Please refer to [c - README.md](./c/README.md)
 
 Please refer to [cmd - README.md](./cmd/README.md)
 
+## Topic Routing
+
+Routing topics is one of the most important thing when it comes to business logics, we currently has built two `TopicRouter`s ready to use, they are `TextRouter` and `RegexRouter`
+
+- `TextRouter` will match the exact same topic which was registered to client by `Handle` method. (Default router in a client)
+- `RegexRouter` will go through all the registered topic handlers, and use regular expression to test whether that is matched and should dispatch to that handler
+
+If you would like to apply other routing strategy to the client, you can provide this option when creating the client
+
+```go
+client, err := NewClient(
+    // for example, use `RegexRouter`
+    libmqtt.WithRouter(NewRegexRouter()),
+)
+```
+
 ## RoadMap
 
-1. Persistant storage of session status (High priority)
+1. File persist storage of session status (High priority)
 1. Full tested multiple connections in one client (High priority)
 1. More efficient processing (Medium priority)
 1. Add compatibility with mqtt 5.0 (Medium priority)

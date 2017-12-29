@@ -34,7 +34,7 @@ type ConPacket struct {
 	WillMessage  []byte
 }
 
-// Type ConPacket's type is CtrlConn
+// Type ConPacket'strategy type is CtrlConn
 func (c *ConPacket) Type() CtrlType {
 	return CtrlConn
 }
@@ -131,7 +131,7 @@ type ConAckPacket struct {
 	Code    ConnAckCode
 }
 
-// Type ConAckPacket's type is CtrlConnAck
+// Type ConAckPacket'strategy type is CtrlConnAck
 func (c *ConAckPacket) Type() CtrlType {
 	return CtrlConnAck
 }

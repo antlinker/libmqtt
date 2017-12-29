@@ -17,6 +17,7 @@
 package libmqtt
 
 import (
+	"fmt"
 	"math"
 	"sync"
 )
@@ -26,6 +27,14 @@ func boolToByte(flag bool) (result byte) {
 		result = 0x01
 	}
 	return
+}
+
+func recvKey(packetID uint16) string {
+	return fmt.Sprintf("%s%d", "R", packetID)
+}
+
+func sendKey(packetID uint16) string {
+	return fmt.Sprintf("%s%d", "S", packetID)
 }
 
 type idGenerator struct {

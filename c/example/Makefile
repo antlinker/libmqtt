@@ -17,6 +17,8 @@ ifeq ($(SYSTEM),Darwin)
 	PLATFORM_FLAGS := -framework CoreFoundation -framework Security
 endif
 
+.PHONY: build run clean
+
 build:
 	$(CC) $(CFLAGS) -o $(TARGET) example.c $(BUILD_DIR)/libmqtt.a $(PLATFORM_FLAGS)
 

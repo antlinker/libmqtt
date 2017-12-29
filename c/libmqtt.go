@@ -146,6 +146,7 @@ func SetSendBuf(size C.int) {
 }
 
 // SetTLS (char * certFile, char * keyFile, char * caCert, char * serverNameOverride, bool skipVerify)
+// use ssl to connect
 //export SetTLS
 func SetTLS(certFile, keyFile, caCert, serverNameOverride *C.char, skipVerify C.bool) {
 	addOption(mq.WithTLS(
@@ -158,6 +159,7 @@ func SetTLS(certFile, keyFile, caCert, serverNameOverride *C.char, skipVerify C.
 }
 
 // SetWill (char *topic, int qos, bool retain, char *payload, int payloadSize)
+// mark this connection with will message
 //export SetWill
 func SetWill(topic *C.char, qos C.int, retain C.bool, payload *C.char, payloadSize C.int) {
 	addOption(mq.WithWill(
@@ -169,6 +171,7 @@ func SetWill(topic *C.char, qos C.int, retain C.bool, payload *C.char, payloadSi
 }
 
 // SetUp ()
+// setup the client with previously defined options
 //export SetUp
 func SetUp() *C.char {
 	var err error
