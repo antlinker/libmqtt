@@ -28,6 +28,11 @@ import (
 	"time"
 )
 
+var (
+	// ErrTimeOut connection timeout error
+	ErrTimeOut = errors.New("connection timeout ")
+)
+
 // BackoffOption defines the parameters for the reconnecting backoff strategy.
 type BackoffOption struct {
 	// MaxDelay defines the upper bound of backoff delay,

@@ -21,13 +21,6 @@ import (
 	"errors"
 )
 
-var (
-	// ErrTimeOut connection timeout error
-	ErrTimeOut = errors.New("Connection timeout ")
-	// ErrBadPacket connection
-	ErrBadPacket = errors.New("Connection decoded none MQTT packet ")
-)
-
 // Packet is MQTT control packet
 type Packet interface {
 	// Type return the packet type

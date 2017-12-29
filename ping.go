@@ -19,9 +19,9 @@ package libmqtt
 import "bytes"
 
 var (
-	// PingReqPacket is the actual PingReqPacket
+	// PingReqPacket is the final instance of pingReqPacket
 	PingReqPacket = &pingReqPacket{}
-	// PingRespPacket is the actual PingReqPacket
+	// PingRespPacket is the final instance of pingRespPacket
 	PingRespPacket = &pingRespPacket{}
 )
 

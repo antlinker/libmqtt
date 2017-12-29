@@ -17,7 +17,13 @@
 package libmqtt
 
 import (
+	"errors"
 	"io"
+)
+
+var (
+	// ErrBadPacket is the error happened when trying to decode a none MQTT packet
+	ErrBadPacket = errors.New("Decoded none MQTT packet ")
 )
 
 func decodeOnePacket(reader io.Reader) (pkt Packet, err error) {
