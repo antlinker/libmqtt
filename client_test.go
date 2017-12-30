@@ -53,7 +53,6 @@ func plainClient(t *testing.T, exH *extraHandler) Client {
 		WithKeepalive(10, 1.2),
 		WithIdentity("admin", "public"),
 		WithWill("test", Qos0, false, []byte("test data")),
-		WithLog(Verbose),
 	)
 
 	if err != nil {
@@ -78,7 +77,6 @@ func tlsClient(t *testing.T, exH *extraHandler) Client {
 		WithKeepalive(10, 1.2),
 		WithIdentity("admin", "public"),
 		WithWill("test", Qos0, false, []byte("test data")),
-		WithLog(Verbose),
 	)
 
 	if err != nil {
