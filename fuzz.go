@@ -1,3 +1,5 @@
+// +build gofuzz
+
 /*
  * Copyright GoIIoT (https://github.com/goiiot)
  *
@@ -16,30 +18,17 @@
 
 package libmqtt
 
-import "testing"
+import (
+	"bytes"
+)
 
-func TestMemPersist(t *testing.T) {
-	p := NewMemPersist(&PersistStrategy{
-		MaxCount:         1,
-		DropOnExceed:     true,
-		DuplicateReplace: false,
-	})
-
-	p.Store("foo", nil)
-	p.Store("foo", &SubscribePacket{})
-	p.Store("bar", nil)
-
-	if p.count != 1 {
-		t.Log("count =", p.count)
-		t.Fail()
+func Fuzz(data []byte) int {
+	pkt, err := decodeOnePacket(bytes.NewReader(data))
+	if err != nil {
+		if pkt != nil {
+			panic("pkt != nil on error")
+		}
+		return 0
 	}
-
-	if v, ok := p.Load("foo"); !ok || v != nil {
-		t.Log("pkt =", v)
-		t.Fail()
-	}
-}
-
-func TestFilePersist(t *testing.T) {
-
+	return 1
 }

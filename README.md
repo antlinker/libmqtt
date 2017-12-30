@@ -2,22 +2,29 @@
 
 [![Build Status](https://travis-ci.org/goiiot/libmqtt.svg)](https://travis-ci.org/goiiot/libmqtt) [![GoDoc](https://godoc.org/github.com/goiiot/libmqtt?status.svg)](https://godoc.org/github.com/goiiot/libmqtt) [![GoReportCard](https://goreportcard.com/badge/goiiot/libmqtt)](https://goreportcard.com/report/github.com/goiiot/libmqtt)
 
-MQTT 3.1.1 client lib with pure Go
+MQTT 3.1.1 client lib in pure Go.
 
 ## Contents
 
 - [Features](#features)
 - [Usage](#usage)
 - [Topic Routing](#topic-routing)
+- [Benchmark](#benchmark)
+- [RoadMap](#roadmap)
 
 ## Features
 
-1. A full functional MQTT 3.1.1 client. (currently only with in memory session state storage)
-1. HTTP like API.
+1. Full functional MQTT 3.1.1 client. (file persist state is now under work)
+1. HTTP server like API.
+1. High performance and less memory footprint. (see [Benchmark](#benchmark))
 1. Customizable TopicRouter. (see [Topic Routing](#topic-routing))
-1. Command line app support (see [cmd](./cmd/))
-1. C lib support (see [c](./c/))
-1. More efficient, idiomatic Go (maybe not quite idiomatic for now)
+1. Command line app support. (see [cmd](./cmd/))
+1. C lib support. (see [c](./c/))
+1. Idiomatic Go.
+
+## Prerequisite
+
+1. Go 1.9+ (with `GOPATH` configured)
 
 ## Usage
 
@@ -162,10 +169,33 @@ client, err := NewClient(
 )
 ```
 
+## Benchmark
+
+The procedure of the benchmark is as following:
+
+1. Create the client
+1. Connect to server
+1. Subscribe to topic `foo`
+1. Publish to topic `foo`
+1. Unsubsecibe when received all published message (with `foo` topic)
+1. Destroy client (a sudden disconnect without disconnect packet)
+
+The benchmark result listed below was taken on a Macbook Pro 13' (Early 2015, macOS 10.13.2), statistics inside which is the value of ten times average
+
+|Bench Name|Pub Count|ns/op|B/op|allocs/op|Transfer Time|Total Time|
+|---|---|---|---|---|---|---|
+|BenchmarkPahoClient-4|10000|199632|1399|31|0.230s|2.021s|
+|BenchmarkLibmqttClient-4|10000|144407|331|9|0.124s|1.467s|
+|BenchmarkPahoClient-4|50000|205884|1395|31|1.170s|10.316s|
+|BenchmarkLibmqttClient-4|50000|161640|328|9|0.717s|8.105s|
+
+You can make the benchmark using source code from [benchmark](./benchmark/)
+
+Notice: benchmark on libmqtt sometimes can be a infinite loop, we are now trying to solve that.
+
 ## RoadMap
 
 1. File persist storage of session status. (High priority)
 1. Full tested multiple connections in one client. (High priority)
-1. More efficient processing. (Medium priority)
 1. Add compatibility with mqtt 5.0 . (Medium priority)
 1. Export to Java (JNI), Python (CPython), Objective-C... (Low priority)

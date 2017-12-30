@@ -18,7 +18,6 @@ package libmqtt
 
 import (
 	"bytes"
-	"errors"
 )
 
 // Packet is MQTT control packet

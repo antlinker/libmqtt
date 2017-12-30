@@ -28,27 +28,25 @@ var (
 
 func decodeOnePacket(reader io.Reader) (pkt Packet, err error) {
 	headerBytes := make([]byte, 1)
-	_, err = io.ReadFull(reader, headerBytes[:])
-	if err != nil {
+	if _, err = io.ReadFull(reader, headerBytes[:]); err != nil {
 		return
 	}
 
 	var bytesToRead int
-	bytesToRead, err = decodeRemainLength(reader)
-	if err != nil {
+	if bytesToRead, err = decodeRemainLength(reader); err != nil {
 		return
 	}
 
+	if bytesToRead < 2 {
+		return nil, ErrBadPacket
+	}
+
 	body := make([]byte, bytesToRead)
-	if bytesToRead > 0 {
-		var n = 0
-		n, err = io.ReadFull(reader, body[:])
-		if n < 2 {
-			err = ErrBadPacket
-		}
-		if err != nil {
-			return
-		}
+	n := 0
+	if n, err = io.ReadFull(reader, body[:]); err != nil {
+		return
+	} else if n < 2 {
+		return nil, ErrBadPacket
 	}
 
 	header := headerBytes[0]
@@ -56,12 +54,11 @@ func decodeOnePacket(reader io.Reader) (pkt Packet, err error) {
 	switch header >> 4 {
 	case CtrlConn:
 		var protocol string
-		protocol, next, err = decodeString(body)
-		if err != nil {
+		if protocol, next, err = decodeString(body); err != nil {
 			return
 		}
 
-		if len(next) < 2 {
+		if len(next) < 4 {
 			err = ErrBadPacket
 			return
 		}
@@ -84,44 +81,50 @@ func decodeOnePacket(reader io.Reader) (pkt Packet, err error) {
 			tmpPkt.WillTopic, next, err = decodeString(next)
 			tmpPkt.WillMessage, next, err = decodeData(next)
 		}
+
 		if hasUsername {
 			tmpPkt.Username, next, err = decodeString(next)
 		}
+
 		if hasPassword {
 			tmpPkt.Password, _, err = decodeString(next)
 		}
-		pkt = tmpPkt
-	case CtrlConnAck:
-		if len(body) < 2 {
-			err = ErrBadPacket
+
+		if err != nil {
 			return
 		}
+
+		pkt = tmpPkt
+	case CtrlConnAck:
 		pkt = &ConAckPacket{
-			Present: body[0]&0x01 == 1,
+			Present: body[0]&0x01 == 0x01,
 			Code:    body[1],
 		}
 	case CtrlPublish:
 		var topicName string
-		topicName, next, err = decodeString(body)
-		if err != nil {
+		if topicName, next, err = decodeString(body); err != nil {
 			return
 		}
+
 		if len(next) < 2 {
 			err = ErrBadPacket
 			return
 		}
-		tmpPkg := &PublishPacket{
+
+		pub := &PublishPacket{
 			IsDup:     header&0x08 == 0x08,
 			Qos:       header & 0x06 >> 1,
 			IsRetain:  header&0x01 == 1,
 			TopicName: topicName,
 		}
-		if tmpPkg.Qos > Qos0 {
-			tmpPkg.PacketID = uint16(next[0])<<8 + uint16(next[1])
+
+		if pub.Qos > Qos0 {
+			pub.PacketID = uint16(next[0])<<8 + uint16(next[1])
 			next = next[2:]
 		}
-		tmpPkg.Payload = next
-		pkt = tmpPkg
+
+		pub.Payload = next
+		pkt = pub
 	case CtrlPubAck:
 		pkt = &PubAckPacket{
 			PacketID: uint16(body[0])<<8 + uint16(body[1]),
@@ -142,14 +145,20 @@ func decodeOnePacket(reader io.Reader) (pkt Packet, err error) {
 		pktTmp := &SubscribePacket{
 			PacketID: uint16(body[0])<<8 + uint16(body[1]),
 		}
-		next := body[2:]
+
+		next = body[2:]
 		topics := make([]*Topic, 0)
 		for len(next) > 0 {
 			var name string
-			name, next, err = decodeString(next)
-			if err != nil {
+			if name, next, err = decodeString(next); err != nil {
 				return
 			}
+
+			if len(next) < 1 {
+				err = ErrBadPacket
+				return
+			}
+
 			topics = append(topics, &Topic{Name: name, Qos: next[0]})
 			next = next[1:]
 		}
@@ -159,7 +168,8 @@ func decodeOnePacket(reader io.Reader) (pkt Packet, err error) {
 		pktTmp := &SubAckPacket{
 			PacketID: uint16(body[0])<<8 + uint16(body[1]),
 		}
-		next := body[2:]
+
+		next = body[2:]
 		codes := make([]SubAckCode, 0)
 		for i := 0; i < len(next); i++ {
 			codes = append(codes, next[i])
@@ -169,7 +179,7 @@ func decodeOnePacket(reader io.Reader) (pkt Packet, err error) {
 		pktTmp := &UnSubPacket{
 			PacketID: uint16(body[0])<<8 + uint16(body[1]),
 		}
-		next := body[2:]
+		next = body[2:]
 		topics := make([]string, 0)
 		for len(next) > 0 {
 			var name string

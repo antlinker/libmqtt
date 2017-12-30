@@ -8,7 +8,7 @@ A command line MQTT client built on top of libmqtt.
 
 ### Prerequisite
 
-1. Go (with `GOPATH` configured)
+1. Go 1.9+ (with `GOPATH` configured)
 
 ### Steps
 

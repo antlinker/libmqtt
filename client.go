@@ -305,7 +305,7 @@ type client struct {
 	workers *sync.WaitGroup     // workers
 	persist PersistMethod       // persist method
 
-	// error handlers
+	// success/error handlers
 	pH  PubHandler
 	sH  SubHandler
 	uH  UnSubHandler
@@ -315,7 +315,7 @@ type client struct {
 
 // defaultClient create the client with default options
 func defaultClient() *client {
-	c := &client{
+	return &client{
 		options: &clientOptions{
 			sendChanSize: 128,
 			recvChanSize: 128,
@@ -335,7 +335,6 @@ func defaultClient() *client {
 		workers: &sync.WaitGroup{},
 		persist: NewMemPersist(DefaultPersistStrategy()),
 	}
-	return c
 }
 
 // Handle subscription message route
@@ -356,27 +355,27 @@ func (c *client) Connect(h ConnHandler) {
 	}()
 
 	go func() {
-		for e := range c.msgC {
-			switch e.what {
+		for m := range c.msgC {
+			switch m.what {
 			case pubMsg:
 				if c.pH != nil {
-					c.pH(e.msg, e.err)
+					c.pH(m.msg, m.err)
 				}
 			case subMsg:
 				if c.sH != nil {
-					c.sH(e.obj.([]*Topic), e.err)
+					c.sH(m.obj.([]*Topic), m.err)
 				}
 			case unSubMsg:
 				if c.uH != nil {
-					c.uH(e.obj.([]string), e.err)
+					c.uH(m.obj.([]string), m.err)
 				}
 			case netMsg:
 				if c.nH != nil {
-					c.nH(e.msg, e.err)
+					c.nH(m.msg, m.err)
 				}
 			case persistMsg:
 				if c.psH != nil {
-					c.psH(e.err)
+					c.psH(m.err)
 				}
 			}
 		}
@@ -390,23 +389,22 @@ func (c *client) Connect(h ConnHandler) {
 
 // Publish message(s) to topic(s), one to one
 func (c *client) Publish(msg ...*PublishPacket) {
-	lg.d("CLIENT publish, msg(s) =", msg)
 	for _, m := range msg {
-		if m.Qos > Qos2 {
-			m.Qos = Qos2
+		if m == nil {
+			continue
 		}
 
-		toSend := &PublishPacket{
-			Qos:       m.Qos,
-			IsRetain:  m.IsRetain,
-			TopicName: m.TopicName,
-			Payload:   m.Payload,
+		p := m
+		if p.Qos > Qos2 {
+			p.Qos = Qos2
 		}
 
-		if toSend.Qos != Qos0 {
-			toSend.PacketID = c.idGen.next(toSend)
+		if p.Qos != Qos0 {
+			p.PacketID = c.idGen.next(p)
 		}
-		c.sendC <- toSend
+
+		c.sendC <- p
+		lg.d("CLIENT publish, msg =", p)
 	}
 }
 
@@ -444,7 +442,8 @@ func (c *client) Wait() {
 // If force is true, then close connection without sending a DisConnPacket
 func (c *client) Destroy(force bool) {
 	lg.d("CLIENT destroying client with force =", force)
-	close(c.sendC)
+	// TODO close all channel properly
+	// close(c.logicSendC)
 	c.options.bf = nil
 	if force {
 		c.conn.Range(func(k, v interface{}) bool {
@@ -523,10 +522,11 @@ func (c *client) connect(server string, h ConnHandler, triedTimes int) {
 		parent:     c,
 		name:       server,
 		conn:       conn,
+		clientBuf:  &bytes.Buffer{},
 		sendBuf:    &bytes.Buffer{},
 		keepaliveC: make(chan int),
-		sendC:      make(chan Packet),
-		recvC:      make(chan Packet),
+		logicSendC: make(chan Packet),
+		netRecvC:   make(chan Packet),
 	}
 
 	if c.options.bf != nil {
@@ -541,7 +541,6 @@ func (c *client) connect(server string, h ConnHandler, triedTimes int) {
 	}
 
 	go connImpl.handleLogicSend()
-	go connImpl.handleClientSend()
 	go connImpl.handleRecv()
 
 	connImpl.send(&ConPacket{
@@ -558,7 +557,7 @@ func (c *client) connect(server string, h ConnHandler, triedTimes int) {
 	})
 
 	select {
-	case pkt, more := <-connImpl.recvC:
+	case pkt, more := <-connImpl.netRecvC:
 		if more {
 			if pkt.Type() == CtrlConnAck {
 				p := pkt.(*ConAckPacket)
@@ -587,21 +586,23 @@ func (c *client) connect(server string, h ConnHandler, triedTimes int) {
 		return
 	}
 
+	go connImpl.handleClientSend()
+
 	lg.i("CLIENT connected server =", server)
 	if h != nil {
-		go h(server, ConnAccepted, nil)
+		h(server, ConnAccepted, nil)
 	}
 
-	// login success, startLogic mqtt logic
+	// login success, start mqtt logic
 	c.conn.Store(server, connImpl)
-	connImpl.startLogic()
+	connImpl.logic()
 
 	if c.options.bf != nil {
 		triedTimes++
 		c.workers.Add(1)
-		lg.w("CLIENT reconnect to server =", server, "seq =", triedTimes, "delay =", int64(connImpl.reconDelay))
+		lg.w("CLIENT reconnect to server =", server, "seq =", triedTimes, "delay =", connImpl.reconDelay)
 		go func() {
-			<-time.After(connImpl.reconDelay)
+			time.Sleep(connImpl.reconDelay)
 			c.connect(server, h, triedTimes)
 		}()
 	}
@@ -613,22 +614,23 @@ type connImpl struct {
 	parent     *client       // client which created this connection
 	name       string        // server addr info
 	conn       net.Conn      // connection to server
-	sendBuf    *bytes.Buffer // buffer for packet send
-	sendC      chan Packet   // logic send channel
-	recvC      chan Packet   // received packet from server
+	sendBuf    *bytes.Buffer // buffer for logic packet send
+	clientBuf  *bytes.Buffer // buffer for client packet send
+	logicSendC chan Packet   // logic send channel
+	netRecvC   chan Packet   // received packet from server
 	keepaliveC chan int      // keepalive packet
 	reconDelay time.Duration // reconnection delay
 }
 
-// startLogic mqtt logic
-func (c *connImpl) startLogic() {
-	// startLogic keepalive if required
+// start mqtt logic
+func (c *connImpl) logic() {
+	// start keepalive if required
 	if c.parent.options.keepalive > 0 {
 		go c.keepalive()
 	}
 
 	// inspect incoming packet
-	for pkt := range c.recvC {
+	for pkt := range c.netRecvC {
 		switch pkt.Type() {
 		case CtrlSubAck:
 			p := pkt.(*SubAckPacket)
@@ -790,8 +792,8 @@ func (c *connImpl) close() {
 // handle client message send
 func (c *connImpl) handleClientSend() {
 	for pkt := range c.parent.sendC {
-		pkt.Bytes(c.sendBuf)
-		if _, err := c.sendBuf.WriteTo(c.conn); err != nil {
+		pkt.Bytes(c.clientBuf)
+		if _, err := c.clientBuf.WriteTo(c.conn); err != nil {
 			// DO NOT NOTIFY net err HERE
 			// ALWAYS DETECT net err in receive
 			switch pkt.Type() {
@@ -809,7 +811,7 @@ func (c *connImpl) handleClientSend() {
 		case CtrlPublish:
 			pub := pkt.(*PublishPacket)
 			if pub.Qos == Qos0 {
-				c.parent.msgC <- newPubMsg(pkt.(*PublishPacket).TopicName, nil)
+				c.parent.msgC <- newPubMsg(pub.TopicName, nil)
 			} else {
 				c.parent.persist.Store(sendKey(pub.PacketID), pkt)
 			}
@@ -817,16 +819,16 @@ func (c *connImpl) handleClientSend() {
 			c.parent.persist.Store(sendKey(pkt.(*SubscribePacket).PacketID), pkt)
 		case CtrlUnSub:
 			c.parent.persist.Store(sendKey(pkt.(*UnSubPacket).PacketID), pkt)
-		case CtrlDisConn:
-			// disconnect to server
-			break
 		}
 	}
+	lg.e("exit recv")
+	//for pkt := range c.parent.logicSendC {
+	//}
 }
 
 // handle mqtt logic control packet send
 func (c *connImpl) handleLogicSend() {
-	for pkt := range c.sendC {
+	for pkt := range c.logicSendC {
 		pkt.Bytes(c.sendBuf)
 		if _, err := c.sendBuf.WriteTo(c.conn); err != nil {
 			// DO NOT NOTIFY net err HERE
@@ -842,6 +844,8 @@ func (c *connImpl) handleLogicSend() {
 		case CtrlPubComp:
 			c.parent.persist.Delete(sendKey(pkt.(*PubCompPacket).PacketID))
 		case CtrlDisConn:
+			// disconnect to server
+			lg.i("disconnect to server")
 			c.conn.Close()
 			break
 		}
@@ -853,8 +857,8 @@ func (c *connImpl) handleRecv() {
 	for {
 		pkt, err := decodeOnePacket(c.conn)
 		if err != nil {
-			lg.e("NET connection broken", "server =", c.name, "err =", err)
-			close(c.recvC)
+			lg.e("NET connection broken, server =", c.name, "err =", err)
+			close(c.netRecvC)
 			close(c.keepaliveC)
 			// TODO send proper net error to net handler
 			// count.parent.msgC <- newNetMsg(count.name, err)
@@ -866,12 +870,12 @@ func (c *connImpl) handleRecv() {
 			lg.d("NET received keepalive message")
 			c.keepaliveC <- 1
 		} else {
-			c.recvC <- pkt
+			c.netRecvC <- pkt
 		}
 	}
 }
 
-// send internal mqtt logic packet
+// send mqtt logic packet
 func (c *connImpl) send(pkt Packet) {
-	c.sendC <- pkt
+	c.logicSendC <- pkt
 }

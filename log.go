@@ -65,27 +65,27 @@ func newLogger(l LogLevel) *logger {
 
 	if l <= Error {
 		lo.error = newStdLogger()
-		lo.error.SetPrefix("[LIBMQTT] Error: ")
+		lo.error.SetPrefix("[LIBMQTT] E ")
 	}
 
 	if l <= Warning {
 		lo.warning = newStdLogger()
-		lo.warning.SetPrefix("[LIBMQTT] Warning: ")
+		lo.warning.SetPrefix("[LIBMQTT] W ")
 	}
 
 	if l <= Info {
 		lo.info = newStdLogger()
-		lo.info.SetPrefix("[LIBMQTT] Info: ")
+		lo.info.SetPrefix("[LIBMQTT] I ")
 	}
 
 	if l <= Debug {
 		lo.debug = newStdLogger()
-		lo.debug.SetPrefix("[LIBMQTT] Debug: ")
+		lo.debug.SetPrefix("[LIBMQTT] D ")
 	}
 
 	if l <= Verbose {
 		lo.verbose = newStdLogger()
-		lo.verbose.SetPrefix("[LIBMQTT] Verbose: ")
+		lo.verbose.SetPrefix("[LIBMQTT] V ")
 	}
 
 	if l <= Silent {

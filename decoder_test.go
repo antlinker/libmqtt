@@ -32,6 +32,10 @@ func TestDecodeRemainLength(t *testing.T) {
 	buffer.Reset()
 }
 
+func BenchmarkDecodeRemainLength(b *testing.B) {
+
+}
+
 func TestDecodeOnePacket(t *testing.T) {
 	// MQTT packet should work
 	targetBytes := connWillBytes
@@ -97,4 +101,20 @@ func TestDecodeOnePacket(t *testing.T) {
 
 	// none MQTT packet should fail
 
+}
+
+func BenchmarkDecodeOnePacket(b *testing.B) {
+	b.StopTimer()
+	buf := &bytes.Buffer{}
+	for i := 0; i < b.N; i++ {
+		buf.Write(connWillBytes)
+	}
+
+	b.StartTimer()
+	for i := 0; i < b.N; i++ {
+		_, err := decodeOnePacket(buf)
+		if err != nil {
+			b.Fail()
+		}
+	}
 }
