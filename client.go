@@ -443,7 +443,6 @@ func (c *client) Wait() {
 func (c *client) Destroy(force bool) {
 	lg.d("CLIENT destroying client with force =", force)
 	// TODO close all channel properly
-	// close(c.logicSendC)
 	c.options.bf = nil
 	if force {
 		c.conn.Range(func(k, v interface{}) bool {
@@ -491,7 +490,7 @@ func (c *client) HandlePersist(h PersistHandler) {
 }
 
 // connect to one server and start mqtt logic
-func (c *client) connect(server string, h ConnHandler, triedTimes int) {
+func (c *client) connect(server string, h ConnHandler, reconnectDelay time.Duration) {
 	defer c.workers.Done()
 	var conn net.Conn
 	var err error
@@ -529,19 +528,9 @@ func (c *client) connect(server string, h ConnHandler, triedTimes int) {
 		netRecvC:   make(chan Packet),
 	}
 
-	if c.options.bf != nil {
-		if triedTimes < 1 {
-			connImpl.reconDelay = c.options.bf.FirstDelay
-		} else {
-			connImpl.reconDelay = time.Duration(math.Pow(c.options.bf.Factor, float64(triedTimes)) * float64(c.options.bf.FirstDelay))
-			if connImpl.reconDelay > c.options.bf.MaxDelay {
-				connImpl.reconDelay = c.options.bf.MaxDelay
-			}
-		}
-	}
-
 	go connImpl.handleLogicSend()
 	go connImpl.handleRecv()
+	go connImpl.handleClientSend()
 
 	connImpl.send(&ConPacket{
 		Username:     c.options.username,
@@ -586,11 +575,9 @@ func (c *client) connect(server string, h ConnHandler, triedTimes int) {
 		return
 	}
 
-	go connImpl.handleClientSend()
-
 	lg.i("CLIENT connected server =", server)
 	if h != nil {
-		h(server, ConnAccepted, nil)
+		go h(server, ConnAccepted, nil)
 	}
 
 	// login success, start mqtt logic
@@ -598,12 +585,15 @@ func (c *client) connect(server string, h ConnHandler, triedTimes int) {
 	connImpl.logic()
 
 	if c.options.bf != nil {
-		triedTimes++
 		c.workers.Add(1)
-		lg.w("CLIENT reconnect to server =", server, "seq =", triedTimes, "delay =", connImpl.reconDelay)
+		lg.w("CLIENT reconnecting to server =", server, "delay =", reconnectDelay)
 		go func() {
-			time.Sleep(connImpl.reconDelay)
-			c.connect(server, h, triedTimes)
+			time.Sleep(reconnectDelay)
+			reconnectDelay = time.Duration(float64(reconnectDelay) * c.options.bf.Factor)
+			if reconnectDelay > c.options.bf.MaxDelay {
+				reconnectDelay = c.options.bf.MaxDelay
+			}
+			c.connect(server, h, reconnectDelay)
 		}()
 	}
 }
@@ -619,7 +609,6 @@ type connImpl struct {
 	logicSendC chan Packet   // logic send channel
 	netRecvC   chan Packet   // received packet from server
 	keepaliveC chan int      // keepalive packet
-	reconDelay time.Duration // reconnection delay
 }
 
 // start mqtt logic
@@ -821,9 +810,6 @@ func (c *connImpl) handleClientSend() {
 			c.parent.persist.Store(sendKey(pkt.(*UnSubPacket).PacketID), pkt)
 		}
 	}
-	lg.e("exit recv")
-	//for pkt := range c.parent.logicSendC {
-	//}
 }
 
 // handle mqtt logic control packet send

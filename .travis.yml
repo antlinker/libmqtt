@@ -1,20 +1,23 @@
+sudo: required
+
 language: go
-dist: trusty
+
+services:
+  - docker
 
 go:
   - 1.9.x
 
-# install emqttd
+# install emqttd docker
 before_install:
   - sudo apt-get -qq update
-  - sudo apt-get install -y curl lksctp-tools unzip
-  - curl -fsSL http://emqtt.com/downloads/latest/ubuntu14_04 -o emqttd.zip
-  - unzip emqttd.zip
+  - sudo apt-get install -y curl unzip
+  - curl -fsSL http://emqtt.com/static/brokers/emqttd-docker-v2.3.1.zip -o emqttd-docker-v2.3.1.zip
+  - unzip emqttd-docker-v2.3.1.zip
+  - docker load < emqttd-docker-v2.3.1
 
 before_script:
-  - cd emqttd
-  - ./bin/emqttd start
-  - cd ..
+  - docker run -d --name emq -p 1883:1883 -p 8083:8083 -p 8883:8883 -p 8084:8084 -p 18083:18083 emqttd-docker-v2.3.1
 
 script:
   - make test

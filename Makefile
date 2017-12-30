@@ -1,7 +1,7 @@
 .PHONY: test lib client clean fuzz-test
 
 test:
-	go test -v -run=. -bench=. -benchmem
+	go test -v -run=.
 
 lib:
 	$(MAKE) -C c lib

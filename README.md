@@ -4,6 +4,10 @@
 
 MQTT 3.1.1 client lib in pure Go.
 
+## Prerequisite
+
+- Go 1.9+ (with `GOPATH` configured)
+
 ## Contents
 
 - [Features](#features)
@@ -21,10 +25,6 @@ MQTT 3.1.1 client lib in pure Go.
 1. Command line app support. (see [cmd](./cmd/))
 1. C lib support. (see [c](./c/))
 1. Idiomatic Go.
-
-## Prerequisite
-
-1. Go 1.9+ (with `GOPATH` configured)
 
 ## Usage
 
