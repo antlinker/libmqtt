@@ -1,17 +1,23 @@
 BUILD_DIR := build
 TARGET := libmqtt
+BUILD_ARGS := -ldflags=-s
 
-.PHONY: lib clean example lib-shared lib-archive
+LIB_SHARED := $(BUILD_DIR)/$(TARGET).so
+LIB_ARCHIVE := $(BUILD_DIR)/$(TARGET).a
 
-lib: lib-shared lib-archive
+.PHONY: lib example clean
 
-lib-shared:
-	env CGO_ENABLED=1 go build -buildmode=c-shared -ldflags=-s -o $(BUILD_DIR)/$(TARGET).so
+lib: $(LIB_ARCHIVE) $(LIB_SHARED)
 
-lib-archive:
-	env CGO_ENABLED=1 go build -buildmode=c-archive -ldflags=-s -o $(BUILD_DIR)/$(TARGET).a
+$(LIB_SHARED):
+	env CGO_ENABLED=1 go build -buildmode=c-shared \
+	    $(BUILD_ARGS) -o $(LIB_SHARED)
 
-example: lib
+$(LIB_ARCHIVE):
+	env CGO_ENABLED=1 go build -buildmode=c-archive \
+	    $(BUILD_ARGS) -o $(LIB_ARCHIVE)
+
+example: $(LIB_ARCHIVE)
 	$(MAKE) -C example build
 
 clean:

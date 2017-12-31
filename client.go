@@ -104,7 +104,7 @@ func WithBackoffStrategy(bf *BackoffOption) Option {
 			if bf.Factor < 1 {
 				bf.Factor = 1
 			}
-			c.options.bf = bf
+			c.options.backoffOption = bf
 		}
 		return nil
 	}
@@ -258,7 +258,7 @@ type clientOptions struct {
 	willQos         byte           // used by ConPacket
 	willRetain      bool           // used by ConPacket
 	tlsConfig       *tls.Config    // tls config with client side cert
-	bf              *BackoffOption // backoff option for client reconnection
+	backoffOption   *BackoffOption // backoff option for client reconnection
 }
 
 // Client act as a mqtt client
@@ -302,8 +302,8 @@ type client struct {
 	recvC   chan *PublishPacket // Pub recv channel for receiving
 	idGen   *idGenerator        // sorted in use packetId []uint16
 	router  TopicRouter         // topic router
-	workers *sync.WaitGroup     // workers
 	persist PersistMethod       // persist method
+	workers *sync.WaitGroup     // workers
 
 	// success/error handlers
 	pH  PubHandler
@@ -319,7 +319,7 @@ func defaultClient() *client {
 		options: &clientOptions{
 			sendChanSize: 128,
 			recvChanSize: 128,
-			bf: &BackoffOption{
+			backoffOption: &BackoffOption{
 				MaxDelay:   2 * time.Minute, // default max retry delay is 2min
 				FirstDelay: 5 * time.Second, // first retry delay is 5s
 				Factor:     1.5,
@@ -333,7 +333,7 @@ func defaultClient() *client {
 		conn:    &sync.Map{},
 		idGen:   newIDGenerator(),
 		workers: &sync.WaitGroup{},
-		persist: NewMemPersist(DefaultPersistStrategy()),
+		persist: &NonePersist{},
 	}
 }
 
@@ -443,7 +443,7 @@ func (c *client) Wait() {
 func (c *client) Destroy(force bool) {
 	lg.d("CLIENT destroying client with force =", force)
 	// TODO close all channel properly
-	c.options.bf = nil
+	c.options.backoffOption = nil
 	if force {
 		c.conn.Range(func(k, v interface{}) bool {
 			va := v.(*connImpl)
@@ -584,14 +584,14 @@ func (c *client) connect(server string, h ConnHandler, reconnectDelay time.Durat
 	c.conn.Store(server, connImpl)
 	connImpl.logic()
 
-	if c.options.bf != nil {
+	if c.options.backoffOption != nil {
 		c.workers.Add(1)
 		lg.w("CLIENT reconnecting to server =", server, "delay =", reconnectDelay)
 		go func() {
 			time.Sleep(reconnectDelay)
-			reconnectDelay = time.Duration(float64(reconnectDelay) * c.options.bf.Factor)
-			if reconnectDelay > c.options.bf.MaxDelay {
-				reconnectDelay = c.options.bf.MaxDelay
+			reconnectDelay = time.Duration(float64(reconnectDelay) * c.options.backoffOption.Factor)
+			if reconnectDelay > c.options.backoffOption.MaxDelay {
+				reconnectDelay = c.options.backoffOption.MaxDelay
 			}
 			c.connect(server, h, reconnectDelay)
 		}()

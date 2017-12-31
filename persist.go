@@ -77,6 +77,15 @@ type PersistMethod interface {
 	Destroy() error
 }
 
+type NonePersist struct{}
+
+func (n *NonePersist) Name() string                          { return "NonePersist" }
+func (n *NonePersist) Store(key string, p Packet) error      { return nil }
+func (n *NonePersist) Load(key string) (Packet, bool)        { return nil, false }
+func (n *NonePersist) Range(func(key string, p Packet) bool) {}
+func (n *NonePersist) Delete(key string)                     {}
+func (n *NonePersist) Destroy() error                        { return nil }
+
 // NewMemPersist create a in memory persist method with provided strategy
 // if no strategy provided (nil), then the default strategy will be used
 func NewMemPersist(strategy *PersistStrategy) *MemPersist {

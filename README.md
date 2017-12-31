@@ -2,11 +2,7 @@
 
 [![Build Status](https://travis-ci.org/goiiot/libmqtt.svg)](https://travis-ci.org/goiiot/libmqtt) [![GoDoc](https://godoc.org/github.com/goiiot/libmqtt?status.svg)](https://godoc.org/github.com/goiiot/libmqtt) [![GoReportCard](https://goreportcard.com/badge/goiiot/libmqtt)](https://goreportcard.com/report/github.com/goiiot/libmqtt)
 
-MQTT 3.1.1 client lib in pure Go.
-
-## Prerequisite
-
-- Go 1.9+ (with `GOPATH` configured)
+Modern MQTT 3.1.1 client lib in pure Go, for `Go`, `C` and `Java`
 
 ## Contents
 
@@ -18,13 +14,13 @@ MQTT 3.1.1 client lib in pure Go.
 
 ## Features
 
-1. Full functional MQTT 3.1.1 client. (file persist state is now under work)
-1. HTTP server like API.
-1. High performance and less memory footprint. (see [Benchmark](#benchmark))
-1. Customizable TopicRouter. (see [Topic Routing](#topic-routing))
-1. Command line app support. (see [cmd](./cmd/))
-1. C lib support. (see [c](./c/))
-1. Idiomatic Go.
+1. Full functional MQTT 3.1.1 client (file persist state is now under work)
+1. HTTP server like API
+1. High performance and less memory footprint (see [Benchmark](#benchmark))
+1. Customizable TopicRouter (see [Topic Routing](#topic-routing))
+1. Command line app support (see [cmd](./cmd/))
+1. C lib support (see [c](./c/))
+1. Idiomatic Go, reactive stream
 
 ## Usage
 
@@ -32,9 +28,16 @@ This project can be used as
 
 - A [Go lib](#as-a-go-lib)
 - A [C lib](#as-a-c-lib)
+- A [Java lib](#as-a-java-lib)
 - A [Command line client](#as-a-command-line-client)
 
 ### As a Go lib
+
+#### Prerequisite
+
+- Go 1.9+ (with `GOPATH` configured)
+
+#### Steps
 
 1. Go get this project
 
@@ -60,7 +63,7 @@ if err != nil {
 }
 ```
 
-Notice: If you would like to explore all the options available, please refer to [godoc#Option](https://godoc.org/github.com/goiiot/libmqtt#Option)
+Notice: If you would like to explore all the options available, please refer to [GoDoc#Option](https://godoc.org/github.com/goiiot/libmqtt#Option)
 
 4. Register the handlers and Connect, then you are ready to pub/sub with server
 
@@ -131,13 +134,13 @@ client.Connect(func(server string, code libmqtt.ConnAckCode, err error) {
 })
 ```
 
-5. Unsubscribe topic(s).
+5. Unsubscribe topic(s)
 
 ```go
 client.UnSubscribe("foo", "bar")
 ```
 
-6. Destroy the client when you would like to.
+6. Destroy the client when you would like to
 
 ```go
 // passing true to Destroy means a immediate disconnect to server
@@ -147,18 +150,26 @@ client.Destroy(true)
 
 ### As a C lib
 
-Please refer to [c - README.md](./c/README.md).
+Please refer to [c - README.md](./c/README.md)
+
+### As a Java lib
+
+Please refer to [java - README.md](./java/README.md)
+
+### As a Python lib
+
+TODO
 
 ### As a command line client
 
-Please refer to [cmd - README.md](./cmd/README.md).
+Please refer to [cmd - README.md](./cmd/README.md)
 
 ## Topic Routing
 
-Routing topics is one of the most important thing when it comes to business logics, we currently have built two `TopicRouter`s which is ready to use, they are `TextRouter` and `RegexRouter`.
+Routing topics is one of the most important thing when it comes to business logics, we currently have built two `TopicRouter`s which is ready to use, they are `TextRouter` and `RegexRouter`
 
-- `TextRouter` will match the exact same topic which was registered to client by `Handle` method. (this is the default router in a client).
-- `RegexRouter` will go through all the registered topic handlers, and use regular expression to test whether that is matched and should dispatch to the handler.
+- `TextRouter` will match the exact same topic which was registered to client by `Handle` method. (this is the default router in a client)
+- `RegexRouter` will go through all the registered topic handlers, and use regular expression to test whether that is matched and should dispatch to the handler
 
 If you would like to apply other routing strategy to the client, you can provide this option when creating the client
 
@@ -191,11 +202,11 @@ The benchmark result listed below was taken on a Macbook Pro 13' (Early 2015, ma
 
 You can make the benchmark using source code from [benchmark](./benchmark/)
 
-Notice: benchmark on libmqtt sometimes can be a infinite loop, we are now trying to solve that.
+Notice: benchmark on libmqtt sometimes can be a infinite loop, we are now trying to solve that
 
 ## RoadMap
 
-1. File persist storage of session status. (High priority)
-1. Full tested multiple connections in one client. (High priority)
-1. Add compatibility with mqtt 5.0 . (Medium priority)
-1. Export to Java (JNI), Python (CPython), Objective-C... (Low priority)
+1. File persist storage of session status (High priority)
+1. Full tested multiple connections in one client (High priority)
+1. Add compatibility with mqtt 5.0 (Medium priority)
+1. Export to Python (CPython)... (Low priority)
