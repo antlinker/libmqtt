@@ -51,53 +51,69 @@ make run-jni
 
 ## Usage
 
-0. Include the predefined header `libmqtth.h` and generated header `libmqtt.h`
+1. Create a client with builder
 
-```c
-#include "libmqtth.h"
-#include "libmqtt.h"
+```java
+LibMQTT.Client client = LibMQTT.newBuilder("localhost:8883")
+    .setCleanSession(true)
+    .setDialTimeout(10)
+    .setKeepalive(10, 1.2)
+    .setIdentity(sUsername, sPassword)
+    .setLog(LibMQTT.LogLevel.Verbose)
+    .setSendBuf(100).setRecvBuf(100)
+    .setTLS(sClientCert, sClientKey, sCACert, sServerName, true)
+    .setClientID(sClientID)
+    .build();
 ```
 
-1. Configure the client
+2. Set the client lifecycle callback
 
-```c
-SetServer("localhost:1883");    // required, or client will not work
-SetLog(libmqtt_log_verbose);    // open log as you wish
-SetCleanSession(true);          // clean seesion mark
-SetKeepalive(10, 1.2);          // set keepalive options
-// other options provided by libmqtt are also avalieble here
+```java
+client.setCallback(new LibMQTT.Callback() {
+    public void onConnected() {
+        println("connected to server");
+            client.subscribe(sTopicName, 0);
+    }
+
+    public void onSubResult(String topic, String err){
+        if (err != null) {
+            println("sub", topic ,"failed:", err);
+        }
+        println("sub", topic ,"success");
+        client.publish(sTopicName, 0, sTopicMsg.getBytes());
+    }
+
+    public void onPubResult(String topic, String err){
+        if (err != null) {
+            println("pub", topic ,"failed:", err);
+        }
+        println("pub", topic ,"success");
+        client.unsubscribe(sTopicName);
+    }
+
+    public void onUnSubResult(String topic, String err){
+        if (err != null) {
+            println("unsub", topic ,"failed:", err);
+        }
+        println("unsub", topic ,"success");
+        client.destroy(true);
+    }
+
+    public void onPersistError(String err) {
+        println("persist err happened:", err);
+    }
+
+    public void onLost(String err) {
+        println("connection lost, err:", err);
+    }
+});
 ```
 
-2. Setup the client
+3. Connect to server
 
-```c
-SetUp();
+For java doesn't allow jni part to lock the main thread, you have to implement your own method to wait for client exit, here we just make use of `Thread.sleep()` for example
+
+```java
+client.connect();
+// Thread.sleep(100 *1000);
 ```
-
-3. Register the handlers as you like
-
-```c
-// client handlers (optional, but recommend to)
-SetConnHandler(&conn_handler);
-SetPubHandler(&pub_handler);
-SetSubHandler(&sub_handler);
-SetUnSubHandler(&unsub_handler);
-SetNetHandler(&net_handler);
-
-// the topic handler
-Handle("foo", &topic_handler);
-// Handle("bar", &topic_handler);
-// ...
-```
-
-4. Connect to server and wait for connection close
-
-```c
-// connect to server with
-Conn();
-
-// wait until all connection closed
-Wait();
-```
-
-You can refer to the [example](./example/) for a full usage example
