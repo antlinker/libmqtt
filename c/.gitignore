@@ -1,6 +1,4 @@
 /build
-/cpython
-/jni
 
 # Prerequisites
 *.d

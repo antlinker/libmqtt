@@ -131,7 +131,7 @@ var (
 	clientOptions = make(map[int][]mq.Option)
 )
 
-// int Libmqtt_new_client()
+// Libmqtt_new_client ()
 // create a new client, return the id of client
 // if no client id available return -1
 //export Libmqtt_new_client
@@ -148,20 +148,20 @@ func Libmqtt_new_client() C.int {
 // Libmqtt_client_set_server (int id, char *server)
 //export Libmqtt_client_set_server
 func Libmqtt_client_set_server(id C.int, server *C.char) {
-	clientID := int(id)
-	if v, ok := clientOptions[clientID]; ok {
+	cid := int(id)
+	if v, ok := clientOptions[cid]; ok {
 		v = append(v, mq.WithServer(C.GoString(server)))
-		clientOptions[clientID] = v
+		clientOptions[cid] = v
 	}
 }
 
 // Libmqtt_client_set_clean_session (bool flag)
 //export Libmqtt_client_set_clean_session
 func Libmqtt_client_set_clean_session(id C.int, flag C.bool) {
-	clientID := int(id)
-	if v, ok := clientOptions[clientID]; ok {
+	cid := int(id)
+	if v, ok := clientOptions[cid]; ok {
 		v = append(v, mq.WithCleanSession(bool(flag)))
-		clientOptions[clientID] = v
+		clientOptions[cid] = v
 	}
 }
 
@@ -309,9 +309,9 @@ func Libmqtt_handle(id C.int, topic *C.char, h C.libmqtt_topic_handler) {
 	}
 }
 
-// Libmqtt_conn (int id)
-//export Libmqtt_conn
-func Libmqtt_conn(id C.int, h C.libmqtt_conn_handler) {
+// Libmqtt_connect (int id)
+//export Libmqtt_connect
+func Libmqtt_connect(id C.int, h C.libmqtt_conn_handler) {
 	cid := int(id)
 	if c, ok := clients[cid]; ok {
 		c.Connect(func(server string, code mq.ConnAckCode, err error) {
@@ -340,9 +340,9 @@ func Libmqtt_conn(id C.int, h C.libmqtt_conn_handler) {
 	}
 }
 
-// Libmqtt_sub (int id, char *topic, int qos)
-//export Libmqtt_sub
-func Libmqtt_sub(id C.int, topic *C.char, qos C.int) {
+// Libmqtt_subscribe (int id, char *topic, int qos)
+//export Libmqtt_subscribe
+func Libmqtt_subscribe(id C.int, topic *C.char, qos C.int) {
 	cid := int(id)
 	if c, ok := clients[cid]; ok {
 		c.Subscribe(&mq.Topic{
@@ -352,9 +352,9 @@ func Libmqtt_sub(id C.int, topic *C.char, qos C.int) {
 	}
 }
 
-// Libmqtt_pub (int id, char *topic, int qos, char *payload, int payloadSize)
-//export Libmqtt_pub
-func Libmqtt_pub(id C.int, topic *C.char, qos C.int, payload *C.char, payloadSize C.int) {
+// Libmqtt_publish (int id, char *topic, int qos, char *payload, int payloadSize)
+//export Libmqtt_publish
+func Libmqtt_publish(id C.int, topic *C.char, qos C.int, payload *C.char, payloadSize C.int) {
 	cid := int(id)
 	if c, ok := clients[cid]; ok {
 		c.Publish(&mq.PublishPacket{
@@ -365,9 +365,9 @@ func Libmqtt_pub(id C.int, topic *C.char, qos C.int, payload *C.char, payloadSiz
 	}
 }
 
-// Libmqtt_unsub (int id, char *topic)
-//export Libmqtt_unsub
-func Libmqtt_unsub(id C.int, topic *C.char) {
+// Libmqtt_unsubscribe (int id, char *topic)
+//export Libmqtt_unsubscribe
+func Libmqtt_unsubscribe(id C.int, topic *C.char) {
 	cid := int(id)
 	if c, ok := clients[cid]; ok {
 		c.UnSubscribe(C.GoString(topic))

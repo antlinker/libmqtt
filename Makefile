@@ -3,15 +3,35 @@
 test:
 	go test -v -run=.
 
-lib:
+.PHONY: all-lib c-lib java-lib py-lib \
+		clean-c-lib clean-java-lib clean-py-lib
+
+all-lib: all-lib c-lib java-lib py-lib
+
+clean-all-lib: clean-c-lib clean-java-lib clean-py-lib
+
+c-lib:
 	$(MAKE) -C c lib
+
+clean-c-lib:
+	$(MAKE) -C c clean
+
+java-lib:
+	$(MAKE) -C java lib
+
+clean-java-lib:
+	$(MAKE) -C java clean
+
+py-lib:
+	$(MAKE) -C python lib
+
+clean-py-lib:
+	$(MAKE) -C python clean
 
 client:
 	$(MAKE) -C cmd build
 
-clean: fuzz-clean
-	$(MAKE) -C c clean
-	$(MAKE) -C cmd clean
+clean: clean-all-lib fuzz-clean
 
 fuzz-test:
 	go-fuzz-build github.com/goiiot/libmqtt

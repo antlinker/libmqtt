@@ -192,6 +192,23 @@ Java_cc_goiiot_libmqtt_LibMQTT__1setup
     return NULL;
 }
 
+
+
+static JNIEnv *g_env;
+static jclass g_class;
+static jmethodID topic_method_id;
+
+void topic_handler(char *topic, int qos, char *payload, int size) {
+    if (topic_method_id == 0) {
+        return;
+    } else {
+        jbyteArray result = (*g_env)->NewByteArray(g_env, size);
+        (*g_env)->SetByteArrayRegion(g_env, result, 0, size, (jbyte*)payload);
+        (*g_env)->CallStaticVoidMethod(g_env, g_class, topic_method_id, 
+            (*g_env)->NewStringUTF(g_env, topic), qos, result);
+    }
+}
+
 /*
  * Class:     cc_goiiot_libmqtt_LibMQTT
  * Method:    _handle
@@ -202,10 +219,17 @@ Java_cc_goiiot_libmqtt_LibMQTT__1handle
     (JNIEnv *env, jclass c, jint id, jstring topic, jobject callback) {
 
     const char *c_topic = (*env)->GetStringUTFChars(env, topic, 0);
+    g_class = c;
+    g_env = env;
+    topic_method_id = (*env)->GetStaticMethodID(env, c, "onTopicMessage", "(ILjava/lang/String;I[B)V");
     
-    Libmqtt_handle(id, c_topic, NULL);
+    Libmqtt_handle(id, c_topic, &topic_handler);
 
     (*env)->ReleaseStringUTFChars(env, topic, c_topic);
+}
+
+void conn_handler(char *server, libmqtt_connack_code code, char *err) {
+    
 }
 
 /*

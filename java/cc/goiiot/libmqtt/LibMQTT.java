@@ -2,6 +2,10 @@ package cc.goiiot.libmqtt;
 
 public class LibMQTT {
 
+    private static void onTopicMessage(int clientID, String topic, int qos, byte[] payload) {
+        
+    }
+
     public static enum LogLevel {
         Silent, Verbose, Debug, Info, Warning, Error,
     }

@@ -1,9 +1,10 @@
-#!/usr/bin/python
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
 
 from distutils.core import setup
 
 setup(
-    name = 'libmqtt',
+    name = 'libmqttpy',
     version = '0.1',
     keywords = ('simple', 'test'),
     description = 'Python mqtt client lib based on libmqtt in go',
@@ -12,6 +13,6 @@ setup(
     author = 'goiiot',
     author_email = 'jeffctor@gmail.com',
 
-    py_modules = ['libmqtt'],
+    py_modules = ['libmqttpy'],
     platforms = 'any',
 )
