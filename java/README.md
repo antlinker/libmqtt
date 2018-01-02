@@ -14,7 +14,7 @@ __NOTE__: This library is still under work, some bugs can happen
 ### Prerequisite
 
 1. Go (with `GOPATH` configured)
-1. JDK 1.7+
+1. JDK 1.6+
 1. make (for build ease)
 1. gcc (for cgo builds)
 
@@ -48,75 +48,102 @@ make JAVA_HOME=/path/to/your/java/home
 make run-jni
 ```
 
-
 ## Usage
 
-1. Create a client with builder
+0. Import package
 
 ```java
-LibMQTT.Client client = LibMQTT.newBuilder("localhost:8883")
+import cc.goiiot.libmqtt.*;
+```
+
+1. Create a client with client builder
+
+```java
+Client client = Client.newBuilder("localhost:8883")
+    .setTLS("client-cert.pem", "client-key.pem", "ca-cert.pem", "server.name", true)
     .setCleanSession(true)
     .setDialTimeout(10)
     .setKeepalive(10, 1.2)
-    .setIdentity(sUsername, sPassword)
-    .setLog(LibMQTT.LogLevel.Verbose)
-    .setSendBuf(100).setRecvBuf(100)
-    .setTLS(sClientCert, sClientKey, sCACert, sServerName, true)
-    .setClientID(sClientID)
+    .setIdentity("foo", "bar")
+    .setLog(LogLevel.Verbose)
+    .setSendBuf(100)
+    .setRecvBuf(100)
+    .setClientID("foo")
     .build();
 ```
 
 2. Set the client lifecycle callback
 
 ```java
-client.setCallback(new LibMQTT.Callback() {
-    public void onConnected() {
+client.setCallback(new Callback() {
+    public void onConnResult(boolean ok, String descp) {
+        if (!ok) {
+            println("connection error:", descp);
+            return;
+        }
         println("connected to server");
-            client.subscribe(sTopicName, 0);
+        client.subscribe(sTopicName, 0);
     }
 
-    public void onSubResult(String topic, String err){
-        if (err != null) {
-            println("sub", topic ,"failed:", err);
+    public void onLost(String descp) {
+        println("connection lost, err:", descp);
+    }
+
+    public void onSubResult(String topic, boolean ok, String descp) {
+        if (!ok) {
+            println("sub", topic, "failed:", descp);
+            return;
         }
-        println("sub", topic ,"success");
+        println("sub", topic, "success");
         client.publish(sTopicName, 0, sTopicMsg.getBytes());
     }
 
-    public void onPubResult(String topic, String err){
-        if (err != null) {
-            println("pub", topic ,"failed:", err);
+    public void onPubResult(String topic, boolean ok, String descp) {
+        if (!ok) {
+            println("pub", topic, "failed:", descp);
+            return;
         }
-        println("pub", topic ,"success");
+        println("pub", topic, "success");
         client.unsubscribe(sTopicName);
     }
 
-    public void onUnSubResult(String topic, String err){
-        if (err != null) {
-            println("unsub", topic ,"failed:", err);
+    public void onUnSubResult(String topic, boolean ok, String descp) {
+        if (!ok) {
+            println("unsub", topic, "failed:", descp);
+            return;
         }
-        println("unsub", topic ,"success");
+        println("unsub", topic, "success");
         client.destroy(true);
     }
 
-    public void onPersistError(String err) {
-        println("persist err happened:", err);
-    }
-
-    public void onLost(String err) {
-        println("connection lost, err:", err);
+    public void onPersistError(String descp) {
+        println("persist err happened:", descp);
     }
 });
 ```
 
-3. Connect to server
+3. Handle the topic message
 
-For java doesn't allow jni part to lock the main thread, you have to implement your own method to wait for client exit, here we just make use of `Thread.sleep()` for example
+__NOTE__: Current routing behavior of the Java lib is to route all topic message to the last registered topic handler, if that's null, no message will be notified, we are now working on it)
+
+```java
+client.handle(sTopicName, new TopicMessageCallback(){
+    public void onMessage(String topic, int qos, byte[] payload) {
+        println("received message:", new String(payload), "from topic:", topic, "qos = " + qos);
+    }
+});
+```
+
+4. Connect to server and wait for exit
+
+__NOTE__: Currenly, once called `waitClient()` will not exit even when all connection has been closed, we are working on that.
 
 ```java
 client.connect();
-// Thread.sleep(100 *1000);
+client.waintClient();
 ```
+
+You can refer to the [example](./cc/goiiot/libmqtt/example/) for a full usage example
 
 ## LICENSE
 
