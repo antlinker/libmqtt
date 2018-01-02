@@ -41,11 +41,8 @@ void conn_handler(char *server, libmqtt_connack_t code, char *err) {
     printf("connect to server rejected, code: %d\n", code);
   } else {
     // connected to the server, subscribe some topic
-    Libmqtt_sub(client, TOPIC, 0);
+    Libmqtt_subscribe(client, TOPIC, 0);
   }
-
-  free(server);
-  free(err);
 }
 
 // sub_handler for subscribe packet response, non-null err means topic sub failed
@@ -55,11 +52,8 @@ void sub_handler(char *topic, int qos, char *err) {
   } else {
     printf("sub success topic: %s, qos = %d\n", topic, qos);
     // subscribe example topic success, then publish some message to it
-    Libmqtt_pub(client, TOPIC, 0, DATA, sizeof(DATA));
+    Libmqtt_publish(client, TOPIC, 0, DATA, sizeof(DATA));
   }
-
-  free(topic);
-  free(err);
 }
 
 // pub_handler for publish packet response, non-null err means `topic` publish failed
@@ -69,11 +63,8 @@ void pub_handler(char *topic, char *err) {
   } else {
     printf("pub topic: %s success\n", topic);
     // publish topic message succeeded, then unsubscribe that topic
-    Libmqtt_unsub(client, TOPIC);
+    Libmqtt_unsubscribe(client, TOPIC);
   }
-
-  free(topic);
-  free(err);
 }
 
 // unsub_handler for unsubscribe response, non-null err means `topic` unsubscribe failed
@@ -85,25 +76,16 @@ void unsub_handler(char *topic, char *err) {
     // unsubscribe example topic success, destroy and exit now
     Libmqtt_destroy(client, true);
   }
-
-  free(topic);
-  free(err);
 }
 
 // net_handler for net connection information, called only when error happens
 void net_handler(char *server, char *err) {
   printf("conn to server: %s broken, error = %s\n", server, err);
-
-  free(server);
-  free(err);
 }
 
 // topic_handler, just a example topic handler
-void topic_handler(char *topic, int qos, char *msg, int size) {
-  printf("recv topic: %s, qos: %d, msg: %s\n", topic, qos, msg);
-
-  free(topic);
-  free(msg);
+void topic_handler(int client, char *topic, int qos, char *msg, int size) {
+  printf("client: %d recv topic: %s, qos: %d, msg: %s\n", client, topic, qos, msg);
 }
 
 // set client options
@@ -140,7 +122,7 @@ int main(int argc, char *argv[]) {
   Libmqtt_handle(client, TOPIC, &topic_handler);
 
   // connect to server
-  Libmqtt_conn(client, &conn_handler);
+  Libmqtt_connect(client, &conn_handler);
   
   // wait until all connection exit
   Libmqtt_wait(client);
