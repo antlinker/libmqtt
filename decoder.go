@@ -26,14 +26,14 @@ var (
 	ErrBadPacket = errors.New("Decoded none MQTT packet ")
 )
 
-func decodeOnePacket(reader io.Reader) (pkt Packet, err error) {
+func DecodeOnePacket(reader io.Reader) (pkt Packet, err error) {
 	headerBytes := make([]byte, 1)
 	if _, err = io.ReadFull(reader, headerBytes[:]); err != nil {
 		return
 	}
 
 	var bytesToRead int
-	if bytesToRead, err = decodeRemainLength(reader); err != nil {
+	if bytesToRead, err = DecodeRemainLength(reader); err != nil {
 		return
 	}
 
@@ -54,7 +54,7 @@ func decodeOnePacket(reader io.Reader) (pkt Packet, err error) {
 	switch header >> 4 {
 	case CtrlConn:
 		var protocol string
-		if protocol, next, err = decodeString(body); err != nil {
+		if protocol, next, err = DecodeString(body); err != nil {
 			return
 		}
 
@@ -73,21 +73,21 @@ func decodeOnePacket(reader io.Reader) (pkt Packet, err error) {
 			WillRetain:   next[1]&0x20 == 0x20,
 			Keepalive:    uint16(next[2])<<8 + uint16(next[3]),
 		}
-		if tmpPkt.ClientID, next, err = decodeString(next[4:]); err != nil {
+		if tmpPkt.ClientID, next, err = DecodeString(next[4:]); err != nil {
 			return
 		}
 
 		if tmpPkt.IsWill {
-			tmpPkt.WillTopic, next, err = decodeString(next)
-			tmpPkt.WillMessage, next, err = decodeData(next)
+			tmpPkt.WillTopic, next, err = DecodeString(next)
+			tmpPkt.WillMessage, next, err = DecodeData(next)
 		}
 
 		if hasUsername {
-			tmpPkt.Username, next, err = decodeString(next)
+			tmpPkt.Username, next, err = DecodeString(next)
 		}
 
 		if hasPassword {
-			tmpPkt.Password, _, err = decodeString(next)
+			tmpPkt.Password, _, err = DecodeString(next)
 		}
 
 		if err != nil {
@@ -102,7 +102,7 @@ func decodeOnePacket(reader io.Reader) (pkt Packet, err error) {
 		}
 	case CtrlPublish:
 		var topicName string
-		if topicName, next, err = decodeString(body); err != nil {
+		if topicName, next, err = DecodeString(body); err != nil {
 			return
 		}
 
@@ -150,7 +150,7 @@ func decodeOnePacket(reader io.Reader) (pkt Packet, err error) {
 		topics := make([]*Topic, 0)
 		for len(next) > 0 {
 			var name string
-			if name, next, err = decodeString(next); err != nil {
+			if name, next, err = DecodeString(next); err != nil {
 				return
 			}
 
@@ -183,7 +183,7 @@ func decodeOnePacket(reader io.Reader) (pkt Packet, err error) {
 		topics := make([]string, 0)
 		for len(next) > 0 {
 			var name string
-			name, next, err = decodeString(next)
+			name, next, err = DecodeString(next)
 			if err != nil {
 				return
 			}
@@ -205,9 +205,9 @@ func decodeOnePacket(reader io.Reader) (pkt Packet, err error) {
 	return
 }
 
-func decodeString(data []byte) (d string, next []byte, err error) {
+func DecodeString(data []byte) (d string, next []byte, err error) {
 	var b []byte
-	b, next, err = decodeData(data)
+	b, next, err = DecodeData(data)
 	if err == nil {
 		d = string(b)
 	}
@@ -215,7 +215,7 @@ func decodeString(data []byte) (d string, next []byte, err error) {
 	return
 }
 
-func decodeData(data []byte) (d []byte, next []byte, err error) {
+func DecodeData(data []byte) (d []byte, next []byte, err error) {
 	if len(data) < 2 {
 		return nil, nil, ErrBadPacket
 	}
@@ -227,7 +227,7 @@ func decodeData(data []byte) (d []byte, next []byte, err error) {
 	return data[2 : length+2], data[length+2:], nil
 }
 
-func decodeRemainLength(reader io.Reader) (result int, err error) {
+func DecodeRemainLength(reader io.Reader) (result int, err error) {
 	buf := make([]byte, 1)
 	_, err = io.ReadFull(reader, buf[:])
 	result = int(buf[0] & 127)

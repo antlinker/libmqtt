@@ -1,173 +1,35 @@
 package cc.goiiot.libmqtt;
 
-import java.util.*;
+import java.util.Map;
+import java.util.HashMap;
 
-public class LibMQTT {
+import cc.goiiot.libmqtt.Utils;
+import cc.goiiot.libmqtt.Client;
 
-    public static enum LogLevel {
-        Silent, Verbose, Debug, Info, Warning, Error,
+final class LibMQTT {
+
+    static Client setupClient(int cid) throws Exception {
+        String s = LibMQTT._setup(cid);
+        if (!Utils.isEmpty(s)) {
+            throw new Exception(s);
+        }
+        Client c = new Client(cid);
+        sClientMap.put(cid, c);
+        return c;
     }
 
-    public static enum ConnAckCode {
-        Accepted, Rejected, Unavaliable
-    }
-
-    public static Builder newBuilder(String server) throws Exception {
-        int id = _newClient();
-        if (id < 1) {
-            throw new Exception("Can't create mqtt client");
-        }
-        _setServer(id, server);
-        
-        return new Builder(id);
-    }
-
-    public static class Client {
-        private int mID;
-        private Callback mCallback;
-        private Map<String, TopicMessageCallback> mTopicCallbacks;
-
-        private Client(int id) throws Exception {
-            mID = id;
-            mTopicCallbacks = new HashMap<>();
-        }
-
-        public void setCallback(Callback callback) {
-            mCallback = callback;
-        }
-
-        public void connect() {
-            _conn(mID);
-        }
-
-        public void handle(String topic, TopicMessageCallback callback) {
-            if (callback != null) {
-                _handle(mID, topic, callback);
-                mTopicCallbacks.put(topic, callback);
-            }
-        }
-
-        public void publish(String topic, int qos, byte[] payload) {
-            _pub(mID, topic, qos, payload);
-        }
-
-        public void subscribe(String topic, int qos) {
-            _sub(mID, topic, qos);
-        }
-
-        public void unsubscribe(String topic) {
-            _unsub(mID, topic);
-        }
-
-        public void destroy(boolean force) {
-            _destroy(mID, force);
-        }
-    }
-
-    public static class Builder {
-        private int mID;
-
-        private Builder(int id) {
-            mID = id;
-        }
-
-        public Builder setCleanSession(boolean cleanSession) {
-            _setCleanSession(mID, cleanSession);
-            return this;
-        }
-
-        public Builder setKeepalive(int keepalive, double factor) {
-            _setKeepalive(mID, keepalive, factor);
-            return this;
-        }
-
-        public Builder setClientID(String clientID) {
-            _setClientID(mID, clientID);
-            return this;
-        }
-
-        public Builder setDialTimeout(int timeout) {
-            _setDialTimeout(mID, timeout);
-            return this;
-        }
-
-        public Builder setIdentity(String username, String password) {
-            _setIdentity(mID, username, password);
-            return this;
-        }
-
-        public Builder setLog(LogLevel level) {
-            _setLog(mID, level.ordinal());
-            return this;
-        }
-
-        public Builder setSendBuf(int size) {
-            _setSendBuf(mID, size);
-            return this;
-        }
-
-        public Builder setRecvBuf(int size) {
-            _setRecvBuf(mID, size);
-            return this;
-        }
-
-        public Builder setTLS(String cert, String key, String ca, String name, boolean skipVerify) {
-            _setTLS(mID, cert, key, ca, name, skipVerify);
-            return this;
-        }
-
-        public Builder setWill(String topic, int qos, boolean retain, byte[] payload) {
-            _setWill(mID, topic, qos, retain, payload);
-            return this;
-        }
-
-        public Client build() throws Exception {
-            String s = _setup(mID);
-            if (s != null) {
-                throw new Exception(s);
-            }
-
-            Client client = new Client(mID);
-            sClientMap.put(mID, client);
-            return client;
-        }
-    }
-
-    public interface TopicMessageCallback {
-        void onMessage(String topic, int qos, byte[] payload);
-    }
-
-    public static interface Callback {
-
-        public void onConnResult(Exception e);
-        
-        public void onLost(Exception e);
-
-        public void onSubResult(String topic, boolean ok);
-        
-        public void onPubResult(String topic, boolean ok);
-        
-        public void onUnSubResult(String topic, boolean ok);
-
-        public void onPersistError(Exception e);
-    }
-
-    static {
-        System.loadLibrary("mqtt-jni");
-    }
-
-
-    private static final Map<Integer, Client> sClientMap = new HashMap();
+    private static final Map<Integer, Client> sClientMap = new HashMap<>();
 
     private static void onConnMessage(int clientID, int code, String err) {
         Client c = sClientMap.get(clientID);
         if (c == null || c.mCallback == null) {
             return;
         }
-        if (err == null || "".equals(err)) {
-            c.mCallback.onConnResult(null);
+        if (!Utils.isEmpty(err)) {
+            c.mCallback.onConnResult(false, err);
+            return;
         }
-        c.mCallback.onConnResult(new Exception(err));
+        c.mCallback.onConnResult(true, "ok");
     }
 
     private static void onNetMessage(int clientID, String err) {
@@ -175,7 +37,7 @@ public class LibMQTT {
         if (c == null || c.mCallback == null) {
             return;
         }
-        c.mCallback.onLost(new Exception(err));
+        c.mCallback.onLost(err);
     }
 
     private static void onPubMessage(int clientID, String topic, String err) {
@@ -183,10 +45,11 @@ public class LibMQTT {
         if (c == null || c.mCallback == null) {
             return;
         }
-        if (err == null || "".equals(err)) {
-            c.mCallback.onPubResult(topic, true);
+        if (!Utils.isEmpty(err)) {
+            c.mCallback.onPubResult(topic, false, err);
+            return;
         }
-        c.mCallback.onPubResult(topic, false);
+        c.mCallback.onPubResult(topic, true, "ok");
     }
 
     private static void onSubMessage(int clientID, String topic, int qos, String err) {
@@ -194,10 +57,11 @@ public class LibMQTT {
         if (c == null || c.mCallback == null) {
             return;
         }
-        if (err == null || "".equals(err)) {
-            c.mCallback.onSubResult(topic, true);
+        if (!Utils.isEmpty(err)) {
+            c.mCallback.onSubResult(topic, false, err);
+            return;
         }
-        c.mCallback.onSubResult(topic, false);
+        c.mCallback.onSubResult(topic, true, "ok");
     }
 
     private static void onUnsubMessage(int clientID, String topic, String err) {
@@ -205,10 +69,11 @@ public class LibMQTT {
         if (c == null || c.mCallback == null) {
             return;
         }
-        if (err == null || "".equals(err)) {
-            c.mCallback.onUnSubResult(topic, true);
+        if (!Utils.isEmpty(err)) {
+            c.mCallback.onUnSubResult(topic, false, err);
+            return;
         }
-        c.mCallback.onUnSubResult(topic, false);
+        c.mCallback.onUnSubResult(topic, true, "ok");
     }
 
     private static void onPersistError(int clientID, String err) {
@@ -216,54 +81,68 @@ public class LibMQTT {
         if (c == null || c.mCallback == null) {
             return;
         }
-        c.mCallback.onPersistError(new Exception(err));
+        c.mCallback.onPersistError(err);
     }
 
     private static void onTopicMessage(int clientID, String topic, int qos, byte[] payload) {
         Client c = sClientMap.get(clientID);
-        if (c == null || c.mTopicCallbacks == null) {
+        if (c == null || c.mMainTopicCallback == null) {
             return;
         }
+        c.mMainTopicCallback.onMessage(topic, qos, payload);
         // TODO: deliver topic message to correct topic handler
     }
 
-    private static native int _newClient();
+    static {
+        System.loadLibrary("mqtt-jni");
+        _init();
+    }
 
-    private static native void _setServer(int id, String server);
-
-    private static native void _setCleanSession(int id, boolean flag);
-
-    private static native void _setKeepalive(int id, int keepalive, double factor);
-
-    private static native void _setClientID(int id, String clientID);
-
-    private static native void _setDialTimeout(int id, int timeout);
-
-    private static native void _setIdentity(int id, String username, String password);
-
-    private static native void _setLog(int id, int logLevel);
-
-    private static native void _setSendBuf(int id, int size);
-
-    private static native void _setRecvBuf(int id, int size);
-
-    private static native void _setTLS(int id, String cert, String key, String ca, String name, boolean skipVerify);
-
-    private static native void _setWill(int id, String topic, int qos, boolean retain, byte[] payload);
+    private static native void _init();
 
     private static native String _setup(int id);
 
-    private static native String _setCallback(int id, Callback callback);
+    static native int _newClient();
 
-    private static native void _handle(int id, String topic, TopicMessageCallback  callback);
+    static native void _setServer(int id, String server);
 
-    private static native void _conn(int id);
+    static native void _setCleanSession(int id, boolean flag);
 
-    private static native void _pub(int id, String topic, int qos, byte[] payload);
+    static native void _setKeepalive(int id, int keepalive, double factor);
 
-    private static native void _sub(int id, String topic, int qos);
+    static native void _setClientID(int id, String clientID);
 
-    private static native void _unsub(int id, String topic);
+    static native void _setDialTimeout(int id, int timeout);
 
-    private static native void _destroy(int id, boolean force);
+    static native void _setIdentity(int id, String username, String password);
+
+    static native void _setLog(int id, int logLevel);
+
+    static native void _setSendBuf(int id, int size);
+
+    static native void _setRecvBuf(int id, int size);
+
+    static native void _setTLS(int id, String cert, String key, String ca, String name, boolean skipVerify);
+
+    static native void _setWill(int id, String topic, int qos, boolean retain, byte[] payload);
+
+    static native void _setNonePersist(int id);
+
+    static native void _setMemPersist(int id, int maxCount, boolean dropOnExceed, boolean duplicateReplace);
+
+    static native void _setFilePersist(int id, String dirPath, int maxCount, boolean dropOnExceed, boolean duplicateReplace);
+
+    static native void _handle(int id, String topic, TopicMessageCallback callback);
+
+    static native void _connect(int id);
+
+    static native void _wait(int id);
+
+    static native void _pub(int id, String topic, int qos, byte[] payload);
+
+    static native void _sub(int id, String topic, int qos);
+
+    static native void _unsub(int id, String topic);
+
+    static native void _destroy(int id, boolean force);
 }

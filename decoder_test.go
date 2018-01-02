@@ -24,7 +24,7 @@ import (
 func TestDecodeRemainLength(t *testing.T) {
 	buffer := &bytes.Buffer{}
 	buffer.Write([]byte{0x04})
-	length, err := decodeRemainLength(buffer)
+	length, err := DecodeRemainLength(buffer)
 	if err != nil || length != 0x04 {
 		t.Log(length)
 		t.Fail()
@@ -44,7 +44,7 @@ func TestDecodeOnePacket(t *testing.T) {
 		t.Log(err)
 		t.Fail()
 	} else {
-		pkt, err := decodeOnePacket(buffer)
+		pkt, err := DecodeOnePacket(buffer)
 		if err != nil {
 			t.Log(err)
 			t.Fail()
@@ -93,7 +93,7 @@ func TestDecodeOnePacket(t *testing.T) {
 		t.Log(err)
 		t.Fail()
 	} else {
-		if _, err := decodeOnePacket(buffer); err == nil {
+		if _, err := DecodeOnePacket(buffer); err == nil {
 			t.Log("decoded conn packet, should not happen")
 			t.Fail()
 		}
@@ -112,7 +112,7 @@ func BenchmarkDecodeOnePacket(b *testing.B) {
 
 	b.StartTimer()
 	for i := 0; i < b.N; i++ {
-		_, err := decodeOnePacket(buf)
+		_, err := DecodeOnePacket(buf)
 		if err != nil {
 			b.Fail()
 		}

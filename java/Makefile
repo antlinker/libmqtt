@@ -34,13 +34,14 @@ gen-jni-header: compile-java
 
 compile-java:
 	mkdir -p build
-	javac $(JAVA_PACKAGE_PATH)/LibMQTT.java -d $(BUILD_DIR)
+	javac -Xlint:unchecked $(JAVA_PACKAGE_PATH)/LibMQTT.java -d $(BUILD_DIR)
 
 run-example: compile-example
 	cd $(BUILD_DIR) && \
 	DYLD_LIBRARY_PATH=../$(C_BUILD_DIR) \
 	LD_LIBRARY_PATH=../$(C_BUILD_DIR) \
-	java -Djava.library.path=. $(JAVA_PACKAGE_PATH)/example/Example && \
+	java -Djava.library.path=. \
+	$(JAVA_PACKAGE_PATH)/example/Example && \
 	cd ..
 
 compile-example:

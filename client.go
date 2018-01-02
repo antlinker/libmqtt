@@ -841,7 +841,7 @@ func (c *connImpl) handleLogicSend() {
 // handle all message receive
 func (c *connImpl) handleRecv() {
 	for {
-		pkt, err := decodeOnePacket(c.conn)
+		pkt, err := DecodeOnePacket(c.conn)
 		if err != nil {
 			lg.e("NET connection broken, server =", c.name, "err =", err)
 			close(c.netRecvC)

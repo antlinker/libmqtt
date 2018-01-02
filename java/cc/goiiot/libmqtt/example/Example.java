@@ -1,6 +1,9 @@
 package cc.goiiot.libmqtt.example;
 
-import cc.goiiot.libmqtt.*;
+import cc.goiiot.libmqtt.Client;
+import cc.goiiot.libmqtt.Callback;
+import cc.goiiot.libmqtt.LogLevel;
+import cc.goiiot.libmqtt.TopicMessageCallback;
 
 public class Example {
 
@@ -16,73 +19,98 @@ public class Example {
     private static final String sCACert = "../../testdata/ca-cert.pem";
     private static final String sServerName = "MacBook-Air.local";
 
-    private static void println(String ...strings) {
-        String result = String.join(" ", strings);
-        System.out.println(result);
+    public static void main(String[] args) throws InterruptedException {
+        Client client = createClient();
+        if (client == null) {
+            return;
+        }
+        setCallback(client);
+        client.connect();
+        client.waitClient();
     }
 
-    public static void main(String[] args) {
+    private static Client createClient() {
         try {
-            LibMQTT.Client client = LibMQTT.newBuilder("localhost:8883")
-                    .setCleanSession(true)
-                    .setDialTimeout(10)
-                    .setKeepalive(10, 1.2)
-                    .setIdentity(sUsername, sPassword)
-                    .setLog(LibMQTT.LogLevel.Verbose)
-                    .setSendBuf(100).setRecvBuf(100)
-                    .setTLS(sClientCert, sClientKey, sCACert, sServerName, true)
-                    .setClientID(sClientID)
-                    .build();
+            return Client.newBuilder("localhost:8883")
+                .setTLS(sClientCert, sClientKey, sCACert, sServerName, true)
+                .setCleanSession(true)
+                .setDialTimeout(10)
+                .setKeepalive(10, 1.2)
+                .setIdentity(sUsername, sPassword)
+                .setLog(LogLevel.Verbose)
+                .setSendBuf(100)
+                .setRecvBuf(100)
+                .setClientID(sClientID)
+                .build();
 
-            client.setCallback(new LibMQTT.Callback() {
-                public void onConnResult(Exception e) {
-                    if (e != null) {
-                        println("connection error:", e.getMessage());
-                    }
-                    println("connected to server");
-                    client.subscribe(sTopicName, 0);
-                }
-        
-                public void onLost(Exception e) {
-                    println("connection lost, err:", e.getMessage());
-                }
-
-                public void onSubResult(String topic, boolean ok) {
-                    if (!ok) {
-                        println("sub", topic ,"failed");
-                        return;
-                    }
-                    println("sub", topic ,"success");
-                    client.publish(sTopicName, 0, sTopicMsg.getBytes());
-                }
-                
-                public void onPubResult(String topic, boolean ok) {
-                    if (!ok) {
-                        println("pub", topic ,"failed");
-                        return;
-                    }
-                    println("pub", topic ,"success");
-                    client.unsubscribe(sTopicName);
-                }
-                
-                public void onUnSubResult(String topic, boolean ok) {
-                    if (!ok) {
-                        println("unsub", topic ,"failed:");
-                        return;
-                    }
-                    println("unsub", topic ,"success");
-                    client.destroy(true);
-                }
-
-                public void onPersistError(Exception e) {
-                    println("persist err happened:", e.getMessage());
-                }
-            });
-
-            client.connect();
-            Thread.sleep(100 *1000);
         } catch (Exception e) {
-            e.printStackTrace();
+            // Handle client create fail
+            println("create client failed:", e.getMessage());
         }
+        
+        println("created client!");
+
+        return null;
+    }
+
+    private static Client setCallback(Client client) {
+        client.handle(sTopicName, new TopicMessageCallback(){
+            public void onMessage(String topic, int qos, byte[] payload) {
+                println("received message:", new String(payload), "from topic:", topic, "qos = " + qos);
+            }
+        });
+
+        client.setCallback(new Callback() {
+            public void onConnResult(boolean ok, String descp) {
+                if (!ok) {
+                    println("connection error:", descp);
+                    return;
+                }
+                println("connected to server");
+                client.subscribe(sTopicName, 0);
+            }
+
+            public void onLost(String descp) {
+                println("connection lost, err:", descp);
+            }
+
+            public void onSubResult(String topic, boolean ok, String descp) {
+                if (!ok) {
+                    println("sub", topic, "failed:", descp);
+                    return;
+                }
+                println("sub", topic, "success");
+                client.publish(sTopicName, 0, sTopicMsg.getBytes());
+            }
+
+            public void onPubResult(String topic, boolean ok, String descp) {
+                if (!ok) {
+                    println("pub", topic, "failed:", descp);
+                    return;
+                }
+                println("pub", topic, "success");
+                client.unsubscribe(sTopicName);
+            }
+
+            public void onUnSubResult(String topic, boolean ok, String descp) {
+                if (!ok) {
+                    println("unsub", topic, "failed:", descp);
+                    return;
+                }
+                println("unsub", topic, "success");
+                client.destroy(true);
+            }
+
+            public void onPersistError(String descp) {
+                println("persist err happened:", descp);
+            }
+        });
+
+        return client;
+    }
+
+    private static void println(String... strings) {
+        String result = String.join(" ", strings);
+        System.out.println(result);
     }
 }
