@@ -35,41 +35,47 @@ public class Example {
                     .build();
 
             client.setCallback(new LibMQTT.Callback() {
-                public void onConnected() {
+                public void onConnResult(Exception e) {
+                    if (e != null) {
+                        println("connection error:", e.getMessage());
+                    }
                     println("connected to server");
                     client.subscribe(sTopicName, 0);
                 }
+        
+                public void onLost(Exception e) {
+                    println("connection lost, err:", e.getMessage());
+                }
 
-                public void onSubResult(String topic, String err){
-                    if (err != null) {
-                        println("sub", topic ,"failed:", err);
+                public void onSubResult(String topic, boolean ok) {
+                    if (!ok) {
+                        println("sub", topic ,"failed");
+                        return;
                     }
                     println("sub", topic ,"success");
                     client.publish(sTopicName, 0, sTopicMsg.getBytes());
                 }
-        
-                public void onPubResult(String topic, String err){
-                    if (err != null) {
-                        println("pub", topic ,"failed:", err);
+                
+                public void onPubResult(String topic, boolean ok) {
+                    if (!ok) {
+                        println("pub", topic ,"failed");
+                        return;
                     }
                     println("pub", topic ,"success");
                     client.unsubscribe(sTopicName);
                 }
-        
-                public void onUnSubResult(String topic, String err){
-                    if (err != null) {
-                        println("unsub", topic ,"failed:", err);
+                
+                public void onUnSubResult(String topic, boolean ok) {
+                    if (!ok) {
+                        println("unsub", topic ,"failed:");
+                        return;
                     }
                     println("unsub", topic ,"success");
                     client.destroy(true);
                 }
 
-                public void onPersistError(String err) {
-                    println("persist err happened:", err);
-                }
-        
-                public void onLost(String err) {
-                    println("connection lost, err:", err);
+                public void onPersistError(Exception e) {
+                    println("persist err happened:", e.getMessage());
                 }
             });
 

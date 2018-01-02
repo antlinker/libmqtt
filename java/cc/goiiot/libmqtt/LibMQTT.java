@@ -1,13 +1,15 @@
 package cc.goiiot.libmqtt;
 
-public class LibMQTT {
+import java.util.*;
 
-    private static void onTopicMessage(int clientID, String topic, int qos, byte[] payload) {
-        
-    }
+public class LibMQTT {
 
     public static enum LogLevel {
         Silent, Verbose, Debug, Info, Warning, Error,
+    }
+
+    public static enum ConnAckCode {
+        Accepted, Rejected, Unavaliable
     }
 
     public static Builder newBuilder(String server) throws Exception {
@@ -23,9 +25,11 @@ public class LibMQTT {
     public static class Client {
         private int mID;
         private Callback mCallback;
+        private Map<String, TopicMessageCallback> mTopicCallbacks;
 
         private Client(int id) throws Exception {
             mID = id;
+            mTopicCallbacks = new HashMap<>();
         }
 
         public void setCallback(Callback callback) {
@@ -37,7 +41,10 @@ public class LibMQTT {
         }
 
         public void handle(String topic, TopicMessageCallback callback) {
-            _handle(mID, topic, callback);
+            if (callback != null) {
+                _handle(mID, topic, callback);
+                mTopicCallbacks.put(topic, callback);
+            }
         }
 
         public void publish(String topic, int qos, byte[] payload) {
@@ -120,7 +127,9 @@ public class LibMQTT {
                 throw new Exception(s);
             }
 
-            return new Client(mID);
+            Client client = new Client(mID);
+            sClientMap.put(mID, client);
+            return client;
         }
     }
 
@@ -130,21 +139,92 @@ public class LibMQTT {
 
     public static interface Callback {
 
-        public void onConnected();
+        public void onConnResult(Exception e);
+        
+        public void onLost(Exception e);
 
-        public void onSubResult(String topic, String err);
+        public void onSubResult(String topic, boolean ok);
         
-        public void onPubResult(String topic, String err);
+        public void onPubResult(String topic, boolean ok);
         
-        public void onUnSubResult(String topic, String err);
+        public void onUnSubResult(String topic, boolean ok);
 
-        public void onPersistError(String err);
-        
-        public void onLost(String err);
+        public void onPersistError(Exception e);
     }
 
     static {
         System.loadLibrary("mqtt-jni");
+    }
+
+
+    private static final Map<Integer, Client> sClientMap = new HashMap();
+
+    private static void onConnMessage(int clientID, int code, String err) {
+        Client c = sClientMap.get(clientID);
+        if (c == null || c.mCallback == null) {
+            return;
+        }
+        if (err == null || "".equals(err)) {
+            c.mCallback.onConnResult(null);
+        }
+        c.mCallback.onConnResult(new Exception(err));
+    }
+
+    private static void onNetMessage(int clientID, String err) {
+        Client c = sClientMap.get(clientID);
+        if (c == null || c.mCallback == null) {
+            return;
+        }
+        c.mCallback.onLost(new Exception(err));
+    }
+
+    private static void onPubMessage(int clientID, String topic, String err) {
+        Client c = sClientMap.get(clientID);
+        if (c == null || c.mCallback == null) {
+            return;
+        }
+        if (err == null || "".equals(err)) {
+            c.mCallback.onPubResult(topic, true);
+        }
+        c.mCallback.onPubResult(topic, false);
+    }
+
+    private static void onSubMessage(int clientID, String topic, int qos, String err) {
+        Client c = sClientMap.get(clientID);
+        if (c == null || c.mCallback == null) {
+            return;
+        }
+        if (err == null || "".equals(err)) {
+            c.mCallback.onSubResult(topic, true);
+        }
+        c.mCallback.onSubResult(topic, false);
+    }
+
+    private static void onUnsubMessage(int clientID, String topic, String err) {
+        Client c = sClientMap.get(clientID);
+        if (c == null || c.mCallback == null) {
+            return;
+        }
+        if (err == null || "".equals(err)) {
+            c.mCallback.onUnSubResult(topic, true);
+        }
+        c.mCallback.onUnSubResult(topic, false);
+    }
+
+    private static void onPersistError(int clientID, String err) {
+        Client c = sClientMap.get(clientID);
+        if (c == null || c.mCallback == null) {
+            return;
+        }
+        c.mCallback.onPersistError(new Exception(err));
+    }
+
+    private static void onTopicMessage(int clientID, String topic, int qos, byte[] payload) {
+        Client c = sClientMap.get(clientID);
+        if (c == null || c.mTopicCallbacks == null) {
+            return;
+        }
+        // TODO: deliver topic message to correct topic handler
     }
 
     private static native int _newClient();
@@ -172,6 +252,8 @@ public class LibMQTT {
     private static native void _setWill(int id, String topic, int qos, boolean retain, byte[] payload);
 
     private static native String _setup(int id);
+
+    private static native String _setCallback(int id, Callback callback);
 
     private static native void _handle(int id, String topic, TopicMessageCallback  callback);
 

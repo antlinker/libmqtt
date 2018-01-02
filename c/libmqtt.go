@@ -50,75 +50,75 @@ typedef enum {
 } libmqtt_log_level;
 
 typedef void (*libmqtt_conn_handler)
-  (char *server, libmqtt_connack_t code, char *err);
+  (int client, char *server, libmqtt_connack_t code, char *err);
 
 typedef void (*libmqtt_pub_handler)
-  (char *topic, char *err);
+  (int client, char *topic, char *err);
 
 typedef void (*libmqtt_sub_handler)
-  (char *topic, int qos, char *err);
+  (int client, char *topic, int qos, char *err);
 
 typedef void (*libmqtt_unsub_handler)
-  (char *topic, char *err);
+  (int client, char *topic, char *err);
 
 typedef void (*libmqtt_net_handler)
-  (char *server, char *err);
+  (int client, char *server, char *err);
 
 typedef void (*libmqtt_persist_handler)
-  (char *err);
+  (int client, char *err);
 
 typedef void (*libmqtt_topic_handler)
   (int client, char *topic, int qos, char *msg, int size);
 
 static inline void call_conn_handler
-  (libmqtt_conn_handler h, char * server, libmqtt_connack_t code, char * err) {
+  (libmqtt_conn_handler h, int client, char * server, libmqtt_connack_t code, char * err) {
   if (h != NULL) {
-    h(server, code, err);
+    h(client, server, code, err);
     free(server);
     free(err);
   }
 }
 
 static inline void call_pub_handler
-  (libmqtt_pub_handler h, char * topic, char * err) {
+  (libmqtt_pub_handler h, int client, char * topic, char * err) {
   if (h != NULL) {
-    h(topic, err);
+    h(client, topic, err);
     free(topic);
     free(err);
   }
 }
 
 static inline void call_sub_handler
-  (libmqtt_sub_handler h, char * topic, int qos, char * err) {
+  (libmqtt_sub_handler h, int client, char * topic, int qos, char * err) {
   if (h != NULL) {
-    h(topic, qos, err);
+    h(client, topic, qos, err);
     free(topic);
     free(err);
   }
 }
 
 static inline void call_unsub_handler
-  (libmqtt_unsub_handler h, char * topic, char * err) {
+  (libmqtt_unsub_handler h, int client, char * topic, char * err) {
   if (h != NULL) {
-    h(topic, err);
+    h(client, topic, err);
     free(topic);
     free(err);
   }
 }
 
 static inline void call_net_handler
-  (libmqtt_net_handler h, char * server, char * err) {
+  (libmqtt_net_handler h, int client, char * server, char * err) {
   if (h != NULL) {
-    h(server, err);
+    h(client, server, err);
     free(server);
     free(err);
   }
 }
 
 static inline void call_persist_handler
-  (libmqtt_persist_handler h, char *err) {
+  (libmqtt_persist_handler h, int client, char *err) {
   if (h != NULL) {
-    h(err);
+    h(client, err);
     free(err);
   }
 }
@@ -329,7 +329,7 @@ func Libmqtt_connect(client C.int, h C.libmqtt_conn_handler) {
 			if err != nil {
 				er = C.CString(err.Error())
 			}
-			C.call_conn_handler(h, C.CString(server), c, er)
+			C.call_conn_handler(h, client, C.CString(server), c, er)
 		})
 	}
 }
@@ -391,7 +391,7 @@ func Libmqtt_set_pub_handler(client C.int, h C.libmqtt_pub_handler) {
 			if err != nil {
 				er = C.CString(err.Error())
 			}
-			C.call_pub_handler(h, C.CString(topic), er)
+			C.call_pub_handler(h, client, C.CString(topic), er)
 		})
 	}
 }
@@ -406,7 +406,7 @@ func Libmqtt_set_sub_handler(client C.int, h C.libmqtt_sub_handler) {
 				if err != nil {
 					er = C.CString(err.Error())
 				}
-				C.call_sub_handler(h, C.CString(t.Name), C.int(t.Qos), er)
+				C.call_sub_handler(h, client, C.CString(t.Name), C.int(t.Qos), er)
 			}
 		})
 	}
@@ -422,7 +422,7 @@ func Libmqtt_set_unsub_handler(client C.int, h C.libmqtt_unsub_handler) {
 				if err != nil {
 					er = C.CString(err.Error())
 				}
-				C.call_unsub_handler(h, C.CString(t), er)
+				C.call_unsub_handler(h, client, C.CString(t), er)
 			}
 		})
 	}
@@ -434,7 +434,7 @@ func Libmqtt_set_net_handler(client C.int, h C.libmqtt_net_handler) {
 	if c, ok := clients[int(client)]; ok {
 		c.HandleNet(func(server string, err error) {
 			if err != nil {
-				C.call_net_handler(h, C.CString(server), C.CString(err.Error()))
+				C.call_net_handler(h, client, C.CString(server), C.CString(err.Error()))
 			}
 		})
 	}
@@ -446,7 +446,7 @@ func Libmqtt_set_persist_handler(client C.int, h C.libmqtt_persist_handler) {
 	if c, ok := clients[int(client)]; ok {
 		c.HandlePersist(func(err error) {
 			if err != nil {
-				C.call_persist_handler(h, C.CString(err.Error()))
+				C.call_persist_handler(h, client, C.CString(err.Error()))
 			}
 		})
 	}

@@ -46,7 +46,8 @@ Java_cc_goiiot_libmqtt_LibMQTT__1setCleanSession
  * Method:    _setKeepalive
  * Signature: (IID)V
  */
-JNIEXPORT void JNICALL Java_cc_goiiot_libmqtt_LibMQTT__1setKeepalive
+JNIEXPORT void JNICALL 
+Java_cc_goiiot_libmqtt_LibMQTT__1setKeepalive
   (JNIEnv *env, jclass c, jint id, jint keepalive, jdouble factor) {
 
       Libmqtt_client_set_keepalive(id, keepalive, factor);
@@ -192,20 +193,27 @@ Java_cc_goiiot_libmqtt_LibMQTT__1setup
     return NULL;
 }
 
+JNIEXPORT jstring JNICALL 
+Java_cc_goiiot_libmqtt_LibMQTT__1setCallback
+    (JNIEnv *env, jclass c, jint id, jobject callback) {
+    
+
+}
+
 
 
 static JNIEnv *g_env;
 static jclass g_class;
 static jmethodID topic_method_id;
 
-void topic_handler(char *topic, int qos, char *payload, int size) {
+void topic_handler(int client, char *topic, int qos, char *payload, int size) {
     if (topic_method_id == 0) {
         return;
     } else {
         jbyteArray result = (*g_env)->NewByteArray(g_env, size);
         (*g_env)->SetByteArrayRegion(g_env, result, 0, size, (jbyte*)payload);
         (*g_env)->CallStaticVoidMethod(g_env, g_class, topic_method_id, 
-            (*g_env)->NewStringUTF(g_env, topic), qos, result);
+            client, (*g_env)->NewStringUTF(g_env, topic), qos, result);
     }
 }
 
@@ -217,6 +225,10 @@ void topic_handler(char *topic, int qos, char *payload, int size) {
 JNIEXPORT void JNICALL 
 Java_cc_goiiot_libmqtt_LibMQTT__1handle
     (JNIEnv *env, jclass c, jint id, jstring topic, jobject callback) {
+    
+    if (callback == NULL) {
+        return;
+    }
 
     const char *c_topic = (*env)->GetStringUTFChars(env, topic, 0);
     g_class = c;
@@ -228,8 +240,8 @@ Java_cc_goiiot_libmqtt_LibMQTT__1handle
     (*env)->ReleaseStringUTFChars(env, topic, c_topic);
 }
 
-void conn_handler(char *server, libmqtt_connack_code code, char *err) {
-    
+void conn_handler(int client, char *server, libmqtt_connack_t code, char *err) {
+
 }
 
 /*
@@ -241,7 +253,7 @@ JNIEXPORT void JNICALL
 Java_cc_goiiot_libmqtt_LibMQTT__1conn
     (JNIEnv *env, jclass c, jint id) {
     
-    Libmqtt_conn(id, NULL);
+    Libmqtt_connect(id, &conn_handler);
 }
 
 /*
@@ -257,7 +269,7 @@ Java_cc_goiiot_libmqtt_LibMQTT__1pub
     jsize len = (*env)->GetArrayLength(env, payload);
     jbyte *body = (*env)->GetByteArrayElements(env, payload, 0);
 
-    Libmqtt_pub(id, c_topic, qos, body, len);
+    Libmqtt_publish(id, c_topic, qos, body, len);
 
     (*env)->ReleaseStringUTFChars(env, topic, c_topic);
     (*env)->ReleaseByteArrayElements(env, payload, body, 0);
@@ -273,7 +285,9 @@ Java_cc_goiiot_libmqtt_LibMQTT__1sub
     (JNIEnv *env, jclass c, jint id, jstring topic, jint qos) {
 
     const char *c_topic = (*env)->GetStringUTFChars(env, topic, 0);
-    Libmqtt_sub(id, c_topic, qos);
+    
+    Libmqtt_subscribe(id, c_topic, qos);
+
     (*env)->ReleaseStringUTFChars(env, topic, c_topic);
 }
 
@@ -287,6 +301,20 @@ Java_cc_goiiot_libmqtt_LibMQTT__1unsub
     (JNIEnv *env, jclass c, jint id, jstring topic){
 
     const char *c_topic = (*env)->GetStringUTFChars(env, topic, 0);
-    Libmqtt_unsub(id, c_topic);
+    
+    Libmqtt_unsubscribe(id, c_topic);
+
     (*env)->ReleaseStringUTFChars(env, topic, c_topic);
+}
+
+/*
+ * Class:     cc_goiiot_libmqtt_LibMQTT
+ * Method:    _destroy
+ * Signature: (IZ)V
+ */
+JNIEXPORT void JNICALL 
+Java_cc_goiiot_libmqtt_LibMQTT__1destroy
+    (JNIEnv *env, jclass c, jint id, jboolean force) {
+    
+    Libmqtt_destroy(id, force);
 }

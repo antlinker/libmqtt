@@ -34,11 +34,11 @@
 static int client;
 
 // conn_handler for connect packet response
-void conn_handler(char *server, libmqtt_connack_t code, char *err) {
+void conn_handler(int client, char *server, libmqtt_connack_t code, char *err) {
   if (err != NULL) {
-    printf("connect to server: %s failed, error = %s\n", server, err);
+    printf("client: %d connect to server: %s failed, error = %s\n", client, server, err);
   } else if (code != libmqtt_connack_accepted) {
-    printf("connect to server rejected, code: %d\n", code);
+    printf("client: %d connect to server rejected, code: %d\n", client, code);
   } else {
     // connected to the server, subscribe some topic
     Libmqtt_subscribe(client, TOPIC, 0);
@@ -46,41 +46,41 @@ void conn_handler(char *server, libmqtt_connack_t code, char *err) {
 }
 
 // sub_handler for subscribe packet response, non-null err means topic sub failed
-void sub_handler(char *topic, int qos, char *err) {
+void sub_handler(int client, char *topic, int qos, char *err) {
   if (err != NULL) {
-    printf("sub failed topic: %s, error = %s\n", topic, err);
+    printf("client: %d sub failed topic: %s, error = %s\n", client, topic, err);
   } else {
-    printf("sub success topic: %s, qos = %d\n", topic, qos);
+    printf("client: %d sub success topic: %s, qos = %d\n", client, topic, qos);
     // subscribe example topic success, then publish some message to it
     Libmqtt_publish(client, TOPIC, 0, DATA, sizeof(DATA));
   }
 }
 
 // pub_handler for publish packet response, non-null err means `topic` publish failed
-void pub_handler(char *topic, char *err) {
+void pub_handler(int client, char *topic, char *err) {
   if (err != NULL) {
-    printf("pub topic: %s failed, error = %s\n", topic, err);
+    printf("client: %d pub topic: %s failed, error = %s\n", client, topic, err);
   } else {
-    printf("pub topic: %s success\n", topic);
+    printf("client: %d pub topic: %s success\n", client, topic);
     // publish topic message succeeded, then unsubscribe that topic
     Libmqtt_unsubscribe(client, TOPIC);
   }
 }
 
 // unsub_handler for unsubscribe response, non-null err means `topic` unsubscribe failed
-void unsub_handler(char *topic, char *err) {
+void unsub_handler(int client, char *topic, char *err) {
   if (err != NULL) {
-    printf("unsub topic: %s failed, error = %s\n", topic, err);
+    printf("client: %d unsub topic: %s failed, error = %s\n", client, topic, err);
   } else {
-    printf("unsub topic: %s success\n", topic);
+    printf("client: %d unsub topic: %s success\n", client, topic);
     // unsubscribe example topic success, destroy and exit now
     Libmqtt_destroy(client, true);
   }
 }
 
 // net_handler for net connection information, called only when error happens
-void net_handler(char *server, char *err) {
-  printf("conn to server: %s broken, error = %s\n", server, err);
+void net_handler(int client, char *server, char *err) {
+  printf("client: %d conn to server: %s broken, error = %s\n", client, server, err);
 }
 
 // topic_handler, just a example topic handler
@@ -95,6 +95,7 @@ void init() {
     printf("create client failed\n");
     exit(1);
   }
+  printf("create client success, client = %d\n", client);
 
   Libmqtt_client_set_server(client, SERVER);
   Libmqtt_client_set_log(client, LOG_LEVEL);
@@ -111,9 +112,10 @@ int main(int argc, char *argv[]) {
   init();
   char *err = Libmqtt_setup(client);
   if (err != NULL) {
-    printf("error happened when create client: %s\n", err);
+    printf("client: %d error happened when setup client: %s\n", client, err);
     return 1;
   }
+  printf("setup client success\n");
 
   Libmqtt_set_pub_handler(client, &pub_handler);
   Libmqtt_set_sub_handler(client, &sub_handler);
