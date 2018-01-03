@@ -31,6 +31,34 @@ type TopicRouter interface {
 	Dispatch(p *PublishPacket)
 }
 
+// NewStandardRouter will create a standard mqtt router
+func NewStandardRouter() *StandardRouter {
+	return &StandardRouter{m: &sync.Map{}}
+}
+
+// StandardRouter implements standard MQTT routing behaviour
+type StandardRouter struct {
+	m *sync.Map
+}
+
+// Name is the name of router
+func (s *StandardRouter) Name() string {
+	if s == nil {
+		return "<nil>"
+	}
+	return "StandardRouter"
+}
+
+// Handle defines how to register topic with handler
+func (s *StandardRouter) Handle(topic string, h TopicHandler) {
+
+}
+
+// Dispatch defines the action to dispatch published packet
+func (s *StandardRouter) Dispatch(p *PublishPacket) {
+
+}
+
 // NewRegexRouter will create a regex router
 func NewRegexRouter() *RegexRouter {
 	return &RegexRouter{m: &sync.Map{}}
@@ -43,21 +71,24 @@ type RegexRouter struct {
 
 // Name is the name of router
 func (r *RegexRouter) Name() string {
-	return "regex"
+	if r == nil {
+		return "<nil>"
+	}
+
+	return "RegexRouter"
 }
 
 // Handle will register the topic with handler
 func (r *RegexRouter) Handle(topicRegex string, h TopicHandler) {
-	if r.m == nil {
-		r.m = &sync.Map{}
+	if r == nil || r.m == nil {
+		return
 	}
-
 	r.m.Store(regexp.MustCompile(topicRegex), h)
 }
 
 // Dispatch the received packet
 func (r *RegexRouter) Dispatch(p *PublishPacket) {
-	if r.m == nil {
+	if r == nil || r.m == nil {
 		return
 	}
 
@@ -81,15 +112,19 @@ type TextRouter struct {
 	m *sync.Map
 }
 
-// Name is the name of router
+// Name of TextRouter is "TextRouter"
 func (r *TextRouter) Name() string {
-	return "text"
+	if r == nil {
+		return "<nil>"
+	}
+
+	return "TextRouter"
 }
 
 // Handle will register the topic with handler
 func (r *TextRouter) Handle(topic string, h TopicHandler) {
-	if r.m == nil {
-		r.m = &sync.Map{}
+	if r == nil || r.m == nil {
+		return
 	}
 
 	r.m.Store(topic, h)
@@ -97,7 +132,7 @@ func (r *TextRouter) Handle(topic string, h TopicHandler) {
 
 // Dispatch the received packet
 func (r *TextRouter) Dispatch(p *PublishPacket) {
-	if r.m == nil {
+	if r == nil || r.m == nil {
 		return
 	}
 
@@ -105,26 +140,4 @@ func (r *TextRouter) Dispatch(p *PublishPacket) {
 		handler := h.(TopicHandler)
 		handler(p.TopicName, p.Qos, p.Payload)
 	}
-}
-
-// RestRouter is a HTTP RESTFul URL style router
-// TODO
-type restRouter struct {
-}
-
-// Name is the name of router
-func (r *restRouter) Name() string {
-	return "rest"
-}
-
-// Handle will register the topic with handler
-// TODO
-func (r *restRouter) Handle(topic string, h TopicHandler) {
-
-}
-
-// Dispatch the received packet
-// TODO
-func (r *restRouter) Dispatch(p *PublishPacket) {
-
 }

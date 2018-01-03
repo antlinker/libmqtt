@@ -32,14 +32,14 @@ import (
 //gmq "github.com/yosssi/gmq/mqtt/client"
 
 const (
-	keepalive = 10
+	keepalive = 3600
 	server    = "localhost:1883"
 	username  = "foo"
 	password  = "bar"
 	topic     = "/foo"
 	qos       = 0
 
-	pubCount = 50000
+	pubCount = 100000
 )
 
 var (
@@ -55,7 +55,6 @@ func BenchmarkLibmqttClient(b *testing.B) {
 
 	b.ResetTimer()
 	if client, err = lib.NewClient(
-		//lib.WithLog(lib.Verbose),
 		lib.WithServer(server),
 		lib.WithKeepalive(keepalive, 1.2),
 		lib.WithIdentity(username, password),
@@ -68,7 +67,7 @@ func BenchmarkLibmqttClient(b *testing.B) {
 
 	client.HandleSub(func(topics []*lib.Topic, err error) {
 		go func() {
-			for i := 0; i < pubCount; i++ {
+			for i := 0; i < b.N; i++ {
 				client.Publish(&lib.PublishPacket{
 					TopicName: topic,
 					Qos:       qos,
@@ -88,7 +87,6 @@ func BenchmarkLibmqttClient(b *testing.B) {
 		if err != nil {
 			b.FailNow()
 		}
-
 		client.Destroy(true)
 	})
 
@@ -181,7 +179,7 @@ func BenchmarkPahoClient(b *testing.B) {
 		b.FailNow()
 	}
 
-	for i := 0; i < pubCount; i++ {
+	for i := 0; i < b.N; i++ {
 		t = client.Publish(topic, 0, false, topicMsg)
 		if !t.Wait() {
 			b.FailNow()

@@ -1,6 +1,6 @@
-# libmqtt C lib
+# libmqtt C/C++ lib
 
-A MQTT C client library exported from libmqtt
+A MQTT C/C++ client library exported from libmqtt
 
 __NOTE__: This library is still under work, some bugs can happen
 

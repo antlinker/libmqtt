@@ -14,8 +14,31 @@
  * limitations under the License.
  */
 
-package cc.goiiot.libmqtt;
+package extension
 
-public interface TopicMessageCallback {
-    void onMessage(String topic, int qos, byte[] payload);
+import (
+	lib "github.com/goiiot/libmqtt"
+)
+
+// RestRouter is a HTTP RESTFul URL style router
+type HttpRouter struct {
+}
+
+// Name is the name of router
+func (r *HttpRouter) Name() string {
+	if r == nil {
+		return "<nil>"
+	}
+
+	return "HttpRouter"
+}
+
+// Handle will register the topic with handler
+func (r *HttpRouter) Handle(topic string, h lib.TopicHandler) {
+
+}
+
+// Dispatch the received packet
+func (r *HttpRouter) Dispatch(p *lib.PublishPacket) {
+
 }

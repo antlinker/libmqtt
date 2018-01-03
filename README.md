@@ -2,32 +2,38 @@
 
 [![Build Status](https://travis-ci.org/goiiot/libmqtt.svg)](https://travis-ci.org/goiiot/libmqtt) [![GoDoc](https://godoc.org/github.com/goiiot/libmqtt?status.svg)](https://godoc.org/github.com/goiiot/libmqtt) [![GoReportCard](https://goreportcard.com/badge/goiiot/libmqtt)](https://goreportcard.com/report/github.com/goiiot/libmqtt)
 
-Modern MQTT 3.1.1 client lib in pure Go, for `Go`, `C` and `Java`
+Modern MQTT 3.1.1 client lib in pure Go, for `Go`, `C/C++`, `Java` and `Python`
 
 ## Contents
 
 - [Features](#features)
+- [Extensions](#extensions)
 - [Usage](#usage)
 - [Topic Routing](#topic-routing)
+- [Session Persist](#session-persist)
 - [Benchmark](#benchmark)
 - [RoadMap](#roadmap)
 - [LICENSE](#license)
 
 ## Features
 
-1. Full functional MQTT 3.1.1 client (file persist state is now under work)
+1. Full functional MQTT 3.1.1 client
 1. HTTP server like API
 1. High performance and less memory footprint (see [Benchmark](#benchmark))
 1. Customizable TopicRouter (see [Topic Routing](#topic-routing))
-1. [C lib](./c/), [Java lib](./java/), [Python lib (TODO)](./python/), [Command line client](./cmd/) support
+1. [C/C++ lib](./c/), [Java lib](./java/), [Python lib - TODO](./python/), [Command line client](./cmd/) support
 1. Idiomatic Go, reactive stream
+
+## Extensions
+
+Helpful extensions for libmqtt (see [extension](./extension/))
 
 ## Usage
 
 This project can be used as
 
 - A [Go lib](#as-a-go-lib)
-- A [C lib](#as-a-c-lib)
+- A [C/C++ lib](#as-a-c-lib)
 - A [Java lib](#as-a-java-lib)
 - A [Python lib](#as-a-python-lib) (TODO)
 - A [Command line client](#as-a-command-line-client)
@@ -149,7 +155,7 @@ client.UnSubscribe("foo", "bar")
 client.Destroy(true)
 ```
 
-### As a C lib
+### As a C/C++ lib
 
 Please refer to [c - README.md](./c/README.md)
 
@@ -175,11 +181,24 @@ Routing topics is one of the most important thing when it comes to business logi
 If you would like to apply other routing strategy to the client, you can provide this option when creating the client
 
 ```go
-client, err := NewClient(
+client, err := libmqtt.NewClient(
+    // ...
     // for example, use `RegexRouter`
     libmqtt.WithRouter(libmqtt.NewRegexRouter()),
+    // ...
 )
 ```
+
+## Session Persist
+
+Per MQTT Specification, session state should be persisted and be recovered when next time connected to server without clean session flag set, currently we provide persist method as following:
+
+1. NonePersist - no persist
+1. MemPersist - in memory persist
+1. FilePersist - use file as persist method (TODO)
+1. RedisPersist - use redis as persist method (Available inside [github.com/goiiot/libmqtt/extension](./extension/) package)
+
+We don't recommend `FilePersist`, use `RedisPersist` instead
 
 ## Benchmark
 

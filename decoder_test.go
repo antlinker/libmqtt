@@ -24,7 +24,7 @@ import (
 func TestDecodeRemainLength(t *testing.T) {
 	buffer := &bytes.Buffer{}
 	buffer.Write([]byte{0x04})
-	length, err := DecodeRemainLength(buffer)
+	length, err := decodeRemainLength(buffer)
 	if err != nil || length != 0x04 {
 		t.Log(length)
 		t.Fail()
@@ -98,9 +98,6 @@ func TestDecodeOnePacket(t *testing.T) {
 			t.Fail()
 		}
 	}
-
-	// none MQTT packet should fail
-
 }
 
 func BenchmarkDecodeOnePacket(b *testing.B) {

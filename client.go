@@ -92,20 +92,26 @@ func WithKeepalive(keepalive uint16, factor float64) Option {
 }
 
 // WithBackoffStrategy will set reconnect backoff strategy
-func WithBackoffStrategy(bf *BackoffOption) Option {
+func WithBackoffStrategy(firstDelay, maxDelay time.Duration, factor float64) Option {
 	return func(c *client) error {
-		if bf != nil {
-			if bf.FirstDelay < time.Millisecond {
-				bf.FirstDelay = time.Millisecond
-			}
-			if bf.MaxDelay < bf.FirstDelay {
-				bf.MaxDelay = bf.FirstDelay
-			}
-			if bf.Factor < 1 {
-				bf.Factor = 1
-			}
-			c.options.backoffOption = bf
+		if firstDelay < time.Millisecond {
+			firstDelay = time.Millisecond
 		}
+
+		if maxDelay < firstDelay {
+			maxDelay = firstDelay
+		}
+
+		if factor < 1 {
+			factor = 1
+		}
+
+		c.options.backoffOption = &BackoffOption{
+			FirstDelay: firstDelay,
+			MaxDelay:   maxDelay,
+			Factor:     factor,
+		}
+
 		return nil
 	}
 }
@@ -300,10 +306,10 @@ type client struct {
 	msgC    chan *message       // error channel
 	sendC   chan Packet         // Pub channel for sending publish packet to server
 	recvC   chan *PublishPacket // Pub recv channel for receiving
-	idGen   *idGenerator        // sorted in use packetId []uint16
-	router  TopicRouter         // topic router
-	persist PersistMethod       // persist method
-	workers *sync.WaitGroup     // workers
+	idGen   *idGenerator        // Packet id generator
+	router  TopicRouter         // Topic router
+	persist PersistMethod       // Persist method
+	workers *sync.WaitGroup     // Workers (connections)
 
 	// success/error handlers
 	pH  PubHandler
@@ -749,7 +755,9 @@ func (c *connImpl) logic() {
 func (c *connImpl) keepalive() {
 	lg.d("NET start keepalive")
 
-	t := time.NewTicker(c.parent.options.keepalive)
+	t := time.NewTicker(c.parent.options.keepalive * 3 / 4)
+	timeout := time.Duration(float64(c.parent.options.keepalive) * c.parent.options.keepaliveFactor)
+	timeoutTimer := time.NewTimer(timeout)
 	defer t.Stop()
 
 	for range t.C {
@@ -760,9 +768,9 @@ func (c *connImpl) keepalive() {
 			if !more {
 				return
 			}
-		case <-time.After(c.parent.options.keepalive * time.Duration(c.parent.options.keepaliveFactor)):
+			timeoutTimer.Reset(timeout)
+		case <-timeoutTimer.C:
 			lg.i("NET keepalive timeout")
-			// ping timeout
 			t.Stop()
 			c.conn.Close()
 			return
@@ -814,21 +822,21 @@ func (c *connImpl) handleClientSend() {
 
 // handle mqtt logic control packet send
 func (c *connImpl) handleLogicSend() {
-	for pkt := range c.logicSendC {
-		pkt.Bytes(c.sendBuf)
+	for logicPkt := range c.logicSendC {
+		logicPkt.Bytes(c.sendBuf)
 		if _, err := c.sendBuf.WriteTo(c.conn); err != nil {
 			// DO NOT NOTIFY net err HERE
 			// ALWAYS DETECT net err in receive
 			break
 		}
 
-		switch pkt.Type() {
+		switch logicPkt.Type() {
 		case CtrlPubRel:
-			c.parent.persist.Store(sendKey(pkt.(*PubRelPacket).PacketID), pkt)
+			c.parent.persist.Store(sendKey(logicPkt.(*PubRelPacket).PacketID), logicPkt)
 		case CtrlPubAck:
-			c.parent.persist.Delete(sendKey(pkt.(*PubAckPacket).PacketID))
+			c.parent.persist.Delete(sendKey(logicPkt.(*PubAckPacket).PacketID))
 		case CtrlPubComp:
-			c.parent.persist.Delete(sendKey(pkt.(*PubCompPacket).PacketID))
+			c.parent.persist.Delete(sendKey(logicPkt.(*PubCompPacket).PacketID))
 		case CtrlDisConn:
 			// disconnect to server
 			lg.i("disconnect to server")
@@ -851,7 +859,6 @@ func (c *connImpl) handleRecv() {
 			break
 		}
 
-		// pass packets
 		if pkt == PingRespPacket {
 			lg.d("NET received keepalive message")
 			c.keepaliveC <- 1

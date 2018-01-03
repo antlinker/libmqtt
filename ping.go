@@ -37,7 +37,7 @@ type pingReqPacket struct {
 }
 
 func (s *pingReqPacket) Type() CtrlType {
-	return CtrlUnSubAck
+	return CtrlPingReq
 }
 
 func (s *pingReqPacket) Bytes(buffer *bytes.Buffer) (err error) {
@@ -56,7 +56,7 @@ type pingRespPacket struct {
 }
 
 func (s *pingRespPacket) Type() CtrlType {
-	return CtrlUnSubAck
+	return CtrlPingResp
 }
 
 func (s *pingRespPacket) Bytes(buffer *bytes.Buffer) (err error) {
