@@ -24,7 +24,7 @@ import (
 )
 
 func TestTextRouter_Dispatch(t *testing.T) {
-	r := &TextRouter{}
+	r := NewTextRouter()
 	count := 0
 	testTopics := make(map[string]string)
 	const topicCount = 1000
@@ -61,7 +61,7 @@ func TestTextRouter_Dispatch(t *testing.T) {
 }
 
 func TestRegexRouter_Dispatch(t *testing.T) {
-	r := &RegexRouter{}
+	r := NewRegexRouter()
 	allCount, prefixCount, numCount := 0, 0, 0
 
 	r.Handle(".*", func(topic string, code SubAckCode, msg []byte) {
