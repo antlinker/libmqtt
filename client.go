@@ -858,7 +858,7 @@ func (c *connImpl) handleRecv() {
 			close(c.keepaliveC)
 			// TODO send proper net error to net handler
 			if err != ErrBadPacket {
-				c.parent.msgC <- newNetMsg(c.name, err)
+				// c.parent.msgC <- newNetMsg(c.name, err)
 			}
 			break
 		}
