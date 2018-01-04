@@ -17,9 +17,7 @@
 package benchmark
 
 import (
-	"bytes"
 	"net/url"
-	"sync"
 	"sync/atomic"
 	"testing"
 
@@ -32,32 +30,31 @@ import (
 //gmq "github.com/yosssi/gmq/mqtt/client"
 
 const (
-	keepalive = 3600
-	server    = "localhost:1883"
-	username  = "foo"
-	password  = "bar"
-	topic     = "/foo"
-	qos       = 0
+	testKeepalive = 3600
+	testServer    = "localhost:1883"
+	testUsername  = "foo"
+	testPassword  = "bar"
+	testTopic     = "/foo"
+	testQos       = 0
 
-	pubCount = 100000
+	testPubCount = 10000000
 )
 
 var (
-	topicMsg = []byte("bar")
+	testTopicMsg = []byte("bar")
 )
 
 func BenchmarkLibmqttClient(b *testing.B) {
-	b.N = pubCount
+	b.N = testPubCount
 	b.ReportAllocs()
 	var count uint32
 	var client lib.Client
 	var err error
 
-	b.ResetTimer()
 	if client, err = lib.NewClient(
-		lib.WithServer(server),
-		lib.WithKeepalive(keepalive, 1.2),
-		lib.WithIdentity(username, password),
+		lib.WithServer(testServer),
+		lib.WithKeepalive(testKeepalive, 1.2),
+		lib.WithIdentity(testUsername, testPassword),
 		lib.WithRecvBuf(100),
 		lib.WithSendBuf(100),
 		lib.WithCleanSession(true)); err != nil {
@@ -65,79 +62,68 @@ func BenchmarkLibmqttClient(b *testing.B) {
 		b.FailNow()
 	}
 
-	client.HandleSub(func(topics []*lib.Topic, err error) {
-		go func() {
-			for i := 0; i < b.N; i++ {
-				client.Publish(&lib.PublishPacket{
-					TopicName: topic,
-					Qos:       qos,
-					Payload:   topicMsg,
-				})
-			}
-		}()
-	})
-
-	client.HandlePub(func(topic string, err error) {
+	b.ResetTimer()
+	client.HandleUnSub(func(topic []string, err error) {
 		if err != nil {
-			b.FailNow()
-		}
-	})
-
-	client.HandleUnSub(func(topics []string, err error) {
-		if err != nil {
+			b.Log(err)
 			b.FailNow()
 		}
 		client.Destroy(true)
 	})
-
-	client.Handle(topic, func(t string, q lib.QosLevel, msg []byte) {
-		if topic != t || q != qos || bytes.Compare(msg, topicMsg) != 0 {
+	client.HandlePub(func(topic string, err error) {
+		if err != nil {
 			b.FailNow()
 		}
-
 		atomic.AddUint32(&count, 1)
-		if atomic.LoadUint32(&count) == pubCount {
+		if atomic.LoadUint32(&count) == testPubCount {
 			client.UnSubscribe(topic)
 		}
 	})
-
 	client.Connect(func(server string, code lib.ConnAckCode, err error) {
 		if err != nil {
 			b.Log(err)
 			b.FailNow()
 		} else if code != lib.ConnAccepted {
+			b.Log(code)
 			b.FailNow()
 		}
 
-		client.Subscribe(&lib.Topic{Name: topic, Qos: qos})
-	})
+		pubs := make([]*lib.PublishPacket, b.N)
+		pkt := &lib.PublishPacket{
+			TopicName: testTopic,
+			Qos:       testQos,
+			Payload:   testTopicMsg,
+		}
+		for i := 0; i < b.N; i++ {
+			pubs[i] = pkt
+		}
+		client.Publish(pubs...)
 
+	})
 	client.Wait()
 }
 
 func BenchmarkPahoClient(b *testing.B) {
-	b.N = pubCount
+	b.N = testPubCount
 	b.ReportAllocs()
-	var count uint32
 
-	wg := &sync.WaitGroup{}
-	wg.Add(1)
-	b.ResetTimer()
-	serverURL, err := url.Parse("tcp://" + server)
+	serverURL, err := url.Parse("tcp://" + testServer)
 	if err != nil {
+		b.Log(err)
 		b.FailNow()
 	}
 
 	client := pah.NewClient(&pah.ClientOptions{
 		Servers:         []*url.URL{serverURL},
-		KeepAlive:       keepalive,
-		Username:        username,
-		Password:        password,
+		KeepAlive:       testKeepalive,
+		Username:        testUsername,
+		Password:        testPassword,
 		CleanSession:    true,
 		ProtocolVersion: 4,
 		Store:           pah.NewMemoryStore(),
 	})
 
+	b.ResetTimer()
 	t := client.Connect()
 	if !t.Wait() {
 		b.FailNow()
@@ -148,29 +134,6 @@ func BenchmarkPahoClient(b *testing.B) {
 		b.FailNow()
 	}
 
-	t = client.Subscribe(topic, 0, func(c pah.Client, message pah.Message) {
-		if topic != message.Topic() ||
-			bytes.Compare(topicMsg, message.Payload()) != 0 ||
-			qos != message.Qos() {
-			b.FailNow()
-		}
-
-		atomic.AddUint32(&count, 1)
-		if atomic.LoadUint32(&count) == pubCount {
-			t := c.Unsubscribe(topic)
-			if !t.Wait() {
-				b.FailNow()
-			}
-			if err := t.Error(); err != nil {
-				b.Log(err)
-				b.FailNow()
-			}
-
-			c.Disconnect(0)
-			wg.Done()
-		}
-	})
-
 	if !t.Wait() {
 		b.FailNow()
 	}
@@ -180,7 +143,7 @@ func BenchmarkPahoClient(b *testing.B) {
 	}
 
 	for i := 0; i < b.N; i++ {
-		t = client.Publish(topic, 0, false, topicMsg)
+		t = client.Publish(testTopic, 0, false, testTopicMsg)
 		if !t.Wait() {
 			b.FailNow()
 		}
@@ -190,17 +153,26 @@ func BenchmarkPahoClient(b *testing.B) {
 			b.FailNow()
 		}
 	}
-	wg.Wait()
+	t = client.Unsubscribe(testTopic)
+	if !t.Wait() {
+		b.FailNow()
+	}
+	if err := t.Error(); err != nil {
+		b.Log(err)
+		b.FailNow()
+	}
+
+	client.Disconnect(0)
 }
 
 //func BenchmarkGmqClient(b *testing.B) {
 //	client := gmq.New(&gmq.Options{})
 //	client.Connect(&gmq.ConnectOptions{
 //		Network:   "tcp",
-//		Address:   server,
-//		UserName:  []byte(username),
-//		Password:  []byte(password),
-//		KeepAlive: keepalive,
+//		Address:   testServer,
+//		UserName:  []byte(testUsername),
+//		Password:  []byte(testPassword),
+//		KeepAlive: testKeepalive,
 //	})
 //	subHandler := func(topicName, message []byte) {
 //
@@ -208,8 +180,8 @@ func BenchmarkPahoClient(b *testing.B) {
 //	if err := client.Subscribe(&gmq.SubscribeOptions{
 //		SubReqs: []*gmq.SubReq{
 //			{
-//				TopicFilter: []byte(topic),
-//				QoS:         qos,
+//				TopicFilter: []byte(testTopic),
+//				QoS:         testQos,
 //				Handler:     subHandler,
 //			},
 //		},
@@ -222,7 +194,7 @@ func BenchmarkPahoClient(b *testing.B) {
 
 //func BenchmarkSurgeClient(b *testing.B) {
 //	client := &smq.Client{KeepAlive: 10}
-//	err := client.Connect(server, &smqM.ConnectMessage{})
+//	err := client.Connect(testServer, &smqM.ConnectMessage{})
 //	if err != nil {
 //		b.Log(err)
 //		b.FailNow()

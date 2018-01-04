@@ -108,7 +108,7 @@ func (c *ConPacket) payload() *bytes.Buffer {
 	// will topic and message
 	if c.IsWill {
 		encodeDataWithLen([]byte(c.WillTopic), result)
-		encodeDataWithLen([]byte(c.WillMessage), result)
+		encodeDataWithLen(c.WillMessage, result)
 	}
 
 	if c.Username != "" {

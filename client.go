@@ -240,7 +240,7 @@ func NewClient(options ...Option) (Client, error) {
 	}
 
 	c.msgC = make(chan *message)
-	c.sendC = make(chan Packet, c.options.sendChanSize)
+	c.sendC = make(chan *bytes.Buffer, c.options.sendChanSize)
 	c.recvC = make(chan *PublishPacket, c.options.recvChanSize)
 
 	return c, nil
@@ -303,9 +303,10 @@ type client struct {
 	options *clientOptions      // client connection options
 	subs    *sync.Map           // Topic(s) -> []TopicHandler
 	conn    *sync.Map           // ServerAddr -> connection
+	bufPool *sync.Pool          // a pool for buffer
 	msgC    chan *message       // error channel
-	sendC   chan Packet         // Pub channel for sending publish packet to server
-	recvC   chan *PublishPacket // Pub recv channel for receiving
+	sendC   chan *bytes.Buffer  // Pub channel for sending publish packet to server
+	recvC   chan *PublishPacket // recv channel for server pub receiving
 	idGen   *idGenerator        // Packet id generator
 	router  TopicRouter         // Topic router
 	persist PersistMethod       // Persist method
@@ -340,6 +341,7 @@ func defaultClient() *client {
 		idGen:   newIDGenerator(),
 		workers: &sync.WaitGroup{},
 		persist: &NonePersist{},
+		bufPool: &sync.Pool{New: func() interface{} { return &bytes.Buffer{} }},
 	}
 }
 
@@ -365,23 +367,23 @@ func (c *client) Connect(h ConnHandler) {
 			switch m.what {
 			case pubMsg:
 				if c.pH != nil {
-					c.pH(m.msg, m.err)
+					go c.pH(m.msg, m.err)
 				}
 			case subMsg:
 				if c.sH != nil {
-					c.sH(m.obj.([]*Topic), m.err)
+					go c.sH(m.obj.([]*Topic), m.err)
 				}
 			case unSubMsg:
 				if c.uH != nil {
-					c.uH(m.obj.([]string), m.err)
+					go c.uH(m.obj.([]string), m.err)
 				}
 			case netMsg:
 				if c.nH != nil {
-					c.nH(m.msg, m.err)
+					go c.nH(m.msg, m.err)
 				}
 			case persistMsg:
 				if c.psH != nil {
-					c.psH(m.err)
+					go c.psH(m.err)
 				}
 			}
 		}
@@ -395,6 +397,7 @@ func (c *client) Connect(h ConnHandler) {
 
 // Publish message(s) to topic(s), one to one
 func (c *client) Publish(msg ...*PublishPacket) {
+	buf := c.getBuf()
 	for _, m := range msg {
 		if m == nil {
 			continue
@@ -407,21 +410,24 @@ func (c *client) Publish(msg ...*PublishPacket) {
 
 		if p.Qos != Qos0 {
 			p.PacketID = c.idGen.next(p)
+			c.persist.Store(sendKey(p.PacketID), p)
+		} else {
+			c.msgC <- newPubMsg(p.TopicName, nil)
 		}
-
-		c.sendC <- p
-		lg.d("CLIENT publish, msg =", p)
+		p.Bytes(buf)
 	}
+	c.sendC <- buf
 }
 
 // SubScribe topic(s)
 func (c *client) Subscribe(topics ...*Topic) {
 	lg.d("CLIENT subscribe, topic(s) =", topics)
-	s := &SubscribePacket{
-		Topics: topics,
-	}
+	s := &SubscribePacket{Topics: topics}
 	s.PacketID = c.idGen.next(s)
-	c.sendC <- s
+	buf := c.getBuf()
+	s.Bytes(buf)
+	c.sendC <- buf
+	c.persist.Store(sendKey(s.PacketID), s)
 }
 
 // UnSubscribe topic(s)
@@ -430,12 +436,14 @@ func (c *client) UnSubscribe(topics ...string) {
 	for _, t := range topics {
 		c.subs.Delete(t)
 	}
-
 	u := &UnSubPacket{
 		TopicNames: topics,
 	}
 	u.PacketID = c.idGen.next(u)
-	c.sendC <- u
+	buf := c.getBuf()
+	u.Bytes(buf)
+	c.sendC <- buf
+	c.persist.Store(sendKey(u.PacketID), u)
 }
 
 // Wait will wait for all connection to exit
@@ -602,6 +610,19 @@ func (c *client) connect(server string, h ConnHandler, reconnectDelay time.Durat
 			c.connect(server, h, reconnectDelay)
 		}()
 	}
+}
+
+// get a buffer from buf pool
+func (c *client) getBuf() *bytes.Buffer {
+	return c.bufPool.Get().(*bytes.Buffer)
+}
+
+// put back the buffer
+func (c *client) putBuf(buf *bytes.Buffer) {
+	if buf == nil {
+		return
+	}
+	c.bufPool.Put(buf)
 }
 
 // connImpl is the wrapper of connection to server
@@ -788,35 +809,16 @@ func (c *connImpl) close() {
 
 // handle client message send
 func (c *connImpl) handleClientSend() {
-	for pkt := range c.parent.sendC {
-		pkt.Bytes(c.clientBuf)
-		if _, err := c.clientBuf.WriteTo(c.conn); err != nil {
+	for buf := range c.parent.sendC {
+		_, err := buf.WriteTo(c.conn)
+		if err != nil {
 			// DO NOT NOTIFY net err HERE
 			// ALWAYS DETECT net err in receive
-			switch pkt.Type() {
-			case CtrlPublish:
-				c.parent.msgC <- newPubMsg(pkt.(*PublishPacket).TopicName, err)
-			case CtrlSubscribe:
-				c.parent.msgC <- newSubMsg(pkt.(*SubscribePacket).Topics, err)
-			case CtrlUnSub:
-				c.parent.msgC <- newUnSubMsg(pkt.(*UnSubPacket).TopicNames, err)
-			}
+			buf.Reset()
 			break
 		}
 
-		switch pkt.Type() {
-		case CtrlPublish:
-			pub := pkt.(*PublishPacket)
-			if pub.Qos == Qos0 {
-				c.parent.msgC <- newPubMsg(pub.TopicName, nil)
-			} else {
-				c.parent.persist.Store(sendKey(pub.PacketID), pkt)
-			}
-		case CtrlSubscribe:
-			c.parent.persist.Store(sendKey(pkt.(*SubscribePacket).PacketID), pkt)
-		case CtrlUnSub:
-			c.parent.persist.Store(sendKey(pkt.(*UnSubPacket).PacketID), pkt)
-		}
+		c.parent.putBuf(buf)
 	}
 }
 
@@ -855,7 +857,9 @@ func (c *connImpl) handleRecv() {
 			close(c.netRecvC)
 			close(c.keepaliveC)
 			// TODO send proper net error to net handler
-			// count.parent.msgC <- newNetMsg(count.name, err)
+			if err != ErrBadPacket {
+				c.parent.msgC <- newNetMsg(c.name, err)
+			}
 			break
 		}
 
