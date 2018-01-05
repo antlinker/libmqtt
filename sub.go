@@ -16,7 +16,9 @@
 
 package libmqtt
 
-import "bytes"
+import (
+	"bufio"
+)
 
 // SubscribePacket is sent from the Client to the Server
 // to create one or more Subscriptions.
@@ -37,37 +39,33 @@ func (s *SubscribePacket) Type() CtrlType {
 }
 
 // Bytes encode SubscribePacket into buffer
-func (s *SubscribePacket) Bytes(buffer *bytes.Buffer) (err error) {
-	if buffer == nil || s == nil {
-		return
+func (s *SubscribePacket) Bytes(w *bufio.Writer) error {
+	if w == nil || s == nil {
+		return nil
 	}
 
 	// fixed header
-	buffer.WriteByte((CtrlSubscribe << 4) | 0x02)
+	w.WriteByte(CtrlSubscribe<<4 | 0x02)
 	payload := s.payload()
 	// remaining length
-	encodeRemainLength(2+payload.Len(), buffer)
+	writeRemainLength(2+len(payload), w)
 	// packet id
-	buffer.WriteByte(byte(s.PacketID >> 8))
-	buffer.WriteByte(byte(s.PacketID))
+	w.WriteByte(byte(s.PacketID >> 8))
+	w.WriteByte(byte(s.PacketID))
 
-	_, err = payload.WriteTo(buffer)
-
-	return
+	w.Write(payload)
+	return w.Flush()
 }
 
-func (s *SubscribePacket) payload() (result *bytes.Buffer) {
-	result = &bytes.Buffer{}
+func (s *SubscribePacket) payload() []byte {
+	var result []byte
 	if s.Topics != nil {
 		for _, t := range s.Topics {
-			lenTopicName := len(t.Name)
-			result.WriteByte(byte(lenTopicName >> 8))
-			result.WriteByte(byte(lenTopicName))
-			result.Write([]byte(t.Name))
-			result.WriteByte(t.Qos)
+			result = append(result, encodeDataWithLen([]byte(t.Name))...)
+			result = append(result, t.Qos)
 		}
 	}
-	return
+	return result
 }
 
 // SubAckPacket is sent by the Server to the Client
@@ -87,32 +85,25 @@ func (s *SubAckPacket) Type() CtrlType {
 }
 
 // Bytes encode SubAckPacket into buffer
-func (s *SubAckPacket) Bytes(buffer *bytes.Buffer) (err error) {
-	if buffer == nil || s == nil {
-		return
+func (s *SubAckPacket) Bytes(w *bufio.Writer) error {
+	if w == nil || s == nil {
+		return nil
 	}
 	// fixed header
-	buffer.WriteByte(CtrlSubAck << 4)
+	w.WriteByte(CtrlSubAck << 4)
 	// remaining length
 	payload := s.payload()
-	encodeRemainLength(2+payload.Len(), buffer)
+	writeRemainLength(2+len(payload), w)
 	// packet id
-	buffer.WriteByte(byte(s.PacketID >> 8))
-	buffer.WriteByte(byte(s.PacketID))
+	w.WriteByte(byte(s.PacketID >> 8))
+	w.WriteByte(byte(s.PacketID))
 	// payload
-	_, err = payload.WriteTo(buffer)
-
-	return
+	w.Write(payload)
+	return w.Flush()
 }
 
-func (s *SubAckPacket) payload() (result *bytes.Buffer) {
-	result = &bytes.Buffer{}
-	if s.Codes != nil {
-		for _, c := range s.Codes {
-			result.WriteByte(c)
-		}
-	}
-	return
+func (s *SubAckPacket) payload() []byte {
+	return s.Codes
 }
 
 // UnSubPacket is sent by the Client to the Server,
@@ -128,34 +119,32 @@ func (s *UnSubPacket) Type() CtrlType {
 }
 
 // Bytes encode UnSubPacket into buffer
-func (s *UnSubPacket) Bytes(buffer *bytes.Buffer) (err error) {
-	if buffer == nil || s == nil {
-		return
+func (s *UnSubPacket) Bytes(w *bufio.Writer) error {
+	if w == nil || s == nil {
+		return nil
 	}
 
 	// fixed header
-	buffer.WriteByte(CtrlUnSub << 4)
+	w.WriteByte(CtrlUnSub<<4 | 0x02)
 	payload := s.payload()
 	// remaining length
-	encodeRemainLength(2+payload.Len(), buffer)
+	writeRemainLength(2+len(payload), w)
 	// packet id
-	buffer.WriteByte(byte(s.PacketID >> 8))
-	buffer.WriteByte(byte(s.PacketID))
+	w.WriteByte(byte(s.PacketID >> 8))
+	w.WriteByte(byte(s.PacketID))
 
-	_, err = payload.WriteTo(buffer)
-
-	return
+	w.Write(payload)
+	return w.Flush()
 }
 
-func (s *UnSubPacket) payload() (result *bytes.Buffer) {
-	result = &bytes.Buffer{}
+func (s *UnSubPacket) payload() []byte {
+	result := make([]byte, 0)
 	if s.TopicNames != nil {
 		for _, t := range s.TopicNames {
-			encodeDataWithLen([]byte(t), result)
+			result = append(result, encodeDataWithLen([]byte(t))...)
 		}
 	}
-
-	return
+	return result
 }
 
 // UnSubAckPacket is sent by the Server to the Client to confirm
@@ -170,18 +159,17 @@ func (s *UnSubAckPacket) Type() CtrlType {
 }
 
 // Bytes encode UnSubAckPacket into buffer
-func (s *UnSubAckPacket) Bytes(buffer *bytes.Buffer) (err error) {
-	if buffer == nil || s == nil {
-		return
+func (s *UnSubAckPacket) Bytes(w *bufio.Writer) error {
+	if w == nil || s == nil {
+		return nil
 	}
 
 	// fixed header
-	buffer.WriteByte(CtrlUnSubAck << 4)
+	w.WriteByte(CtrlUnSubAck << 4)
 	// remaining length
-	buffer.WriteByte(0x02)
+	w.WriteByte(0x02)
 	// packet id
-	buffer.WriteByte(byte(s.PacketID >> 8))
-	err = buffer.WriteByte(byte(s.PacketID))
-
-	return
+	w.WriteByte(byte(s.PacketID >> 8))
+	w.WriteByte(byte(s.PacketID))
+	return w.Flush()
 }

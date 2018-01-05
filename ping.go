@@ -16,7 +16,9 @@
 
 package libmqtt
 
-import "bytes"
+import (
+	"bufio"
+)
 
 var (
 	// PingReqPacket is the final instance of pingReqPacket
@@ -40,14 +42,15 @@ func (s *pingReqPacket) Type() CtrlType {
 	return CtrlPingReq
 }
 
-func (s *pingReqPacket) Bytes(buffer *bytes.Buffer) (err error) {
-	if buffer == nil || s == nil {
-		return
+func (s *pingReqPacket) Bytes(w *bufio.Writer) error {
+	if w == nil || s == nil {
+		return nil
 	}
 	// fixed header
-	buffer.WriteByte(CtrlPingReq << 4)
+	w.WriteByte(CtrlPingReq << 4)
 	// remaining length
-	return buffer.WriteByte(0x00)
+	w.WriteByte(0x00)
+	return w.Flush()
 }
 
 // pingRespPacket is sent by the Server to the Client in response to
@@ -59,13 +62,14 @@ func (s *pingRespPacket) Type() CtrlType {
 	return CtrlPingResp
 }
 
-func (s *pingRespPacket) Bytes(buffer *bytes.Buffer) (err error) {
-	if buffer == nil || s == nil {
-		return
+func (s *pingRespPacket) Bytes(w *bufio.Writer) error {
+	if w == nil || s == nil {
+		return nil
 	}
 
 	// fixed header
-	buffer.WriteByte(CtrlPingResp << 4)
+	w.WriteByte(CtrlPingResp << 4)
 	// remaining length
-	return buffer.WriteByte(0x00)
+	w.WriteByte(0x00)
+	return w.Flush()
 }

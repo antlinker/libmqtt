@@ -25,20 +25,6 @@ import (
 // test with emqttd server (http://emqtt.io/ or https://github.com/emqtt/emqttd)
 // the server is configured with default configuration
 
-var (
-	testTopics = []string{"/test", "/test/foo", "/test/bar"}
-	testMsgs   = []*PublishPacket{
-		{TopicName: testTopics[0], Qos: Qos0, Payload: []byte("test")},
-		{TopicName: testTopics[1], Qos: Qos1, Payload: []byte("foo")},
-		{TopicName: testTopics[2], Qos: Qos2, Payload: []byte("bar")},
-	}
-	testSubs = []*Topic{
-		{Name: testTopics[0], Qos: Qos0},
-		{Name: testTopics[1], Qos: Qos1},
-		{Name: testTopics[2], Qos: Qos2},
-	}
-)
-
 type extraHandler struct {
 	pubH   func()
 	subH   func()
@@ -96,7 +82,7 @@ func initClient(c Client, exH *extraHandler, t *testing.T) {
 			t.FailNow()
 		}
 		atomic.AddUint32(&pubCount, 1)
-		if atomic.LoadUint32(&pubCount) == uint32(len(testMsgs)) {
+		if atomic.LoadUint32(&pubCount) == uint32(len(testPubMsgs)) {
 			if exH != nil && exH.pubH != nil {
 				exH.pubH()
 			}
@@ -157,8 +143,8 @@ func testConn(c Client, t *testing.T, afterConn func()) {
 
 func testSub(c Client, t *testing.T) {
 	var count uint32
-	N := uint32(len(testMsgs))
-	for index, value := range testMsgs {
+	N := uint32(len(testPubMsgs))
+	for index, value := range testPubMsgs {
 		i := uint32(index)
 		v := value
 		c.Handle(v.TopicName, func(topic string, maxQos SubAckCode, msg []byte) {
@@ -180,7 +166,7 @@ func testSub(c Client, t *testing.T) {
 			}
 		})
 	}
-	c.Subscribe(testSubs...)
+	c.Subscribe(testSubTopics...)
 }
 
 func TestNewClient(t *testing.T) {
@@ -224,7 +210,7 @@ func TestClient_Connect(t *testing.T) {
 func TestClient_Publish(t *testing.T) {
 	var c Client
 	afterConn := func() {
-		c.Publish(testMsgs...)
+		c.Publish(testPubMsgs...)
 	}
 
 	exH := &extraHandler{
@@ -251,7 +237,7 @@ func TestClient_Subscribe(t *testing.T) {
 
 	extH := &extraHandler{
 		subH: func() {
-			c.Publish(testMsgs...)
+			c.Publish(testPubMsgs...)
 		},
 		pubH: func() {
 			c.Destroy(true)
@@ -292,30 +278,30 @@ func TestClient_UnSubscribe(t *testing.T) {
 	c.Wait()
 }
 
-func TestClient_Reconnect(t *testing.T) {
-	c := plainClient(t, nil).(*client)
-	var count uint32
-	c.Connect(func(server string, code ConnAckCode, err error) {
-		if err != nil {
-			t.Log(err)
-			t.FailNow()
-		}
-
-		if code != ConnAccepted {
-			t.Log(code)
-			t.FailNow()
-		}
-
-		if atomic.LoadUint32(&count) < 3 {
-			c.conn.Range(func(key, value interface{}) bool {
-				v := value.(*connImpl)
-				v.conn.Close()
-				return true
-			})
-			atomic.AddUint32(&count, 1)
-		} else {
-			c.Destroy(true)
-		}
-	})
-	c.Wait()
-}
+//func TestClient_Reconnect(t *testing.T) {
+//	c := plainClient(t, nil).(*client)
+//	var count uint32
+//	c.Connect(func(server string, code ConnAckCode, err error) {
+//		if err != nil {
+//			t.Log(err)
+//			t.FailNow()
+//		}
+//
+//		if code != ConnAccepted {
+//			t.Log(code)
+//			t.FailNow()
+//		}
+//
+//		if atomic.LoadUint32(&count) < 3 {
+//			c.conn.Range(func(key, value interface{}) bool {
+//				v := value.(*connImpl)
+//				v.conn.Close()
+//				return true
+//			})
+//			atomic.AddUint32(&count, 1)
+//		} else {
+//			c.Destroy(true)
+//		}
+//	})
+//	c.Wait()
+//}

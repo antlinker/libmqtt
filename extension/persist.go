@@ -24,24 +24,24 @@ import (
 	lib "github.com/goiiot/libmqtt"
 )
 
-const DefaultRedisKey = "libmqtt"
+const defaultRedisKey = "libmqtt"
 
 // NewRedisPersist will create a new RedisPersist for session persist
 // with provided redis connection and key mainKey,
 // if passed empty mainKey here, the default mainKey "libmqtt" will be used
 // if no redis client (nil) provided, will return nil
-func NewRedisPersist(conn *redis.Client, prefix string) *RedisPersist {
+func NewRedisPersist(conn *redis.Client, mainKey string) *RedisPersist {
 	if conn == nil {
 		return nil
 	}
 
-	if prefix == "" {
-		prefix = DefaultRedisKey
+	if mainKey == "" {
+		mainKey = defaultRedisKey
 	}
 
 	return &RedisPersist{
 		conn:    conn,
-		mainKey: prefix,
+		mainKey: mainKey,
 		buf:     &bytes.Buffer{},
 	}
 }
@@ -102,9 +102,7 @@ func (r *RedisPersist) Range(f func(string, lib.Packet) bool) {
 		return
 	}
 
-	if set, err := r.conn.HGetAll(r.mainKey).Result(); err != nil {
-		return
-	} else {
+	if set, err := r.conn.HGetAll(r.mainKey).Result(); err == nil {
 		for k, v := range set {
 			if pkt, err := lib.DecodeOnePacket(strings.NewReader(v)); err != nil {
 				r.Delete(k)
@@ -118,7 +116,7 @@ func (r *RedisPersist) Range(f func(string, lib.Packet) bool) {
 	}
 }
 
-// Delete
+// Delete a persisted packet with key
 func (r *RedisPersist) Delete(key string) error {
 	if r == nil || r.conn == nil {
 		return nil

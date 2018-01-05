@@ -16,10 +16,12 @@
 
 package libmqtt
 
-import "bytes"
+import (
+	"bufio"
+)
 
-// ConPacket is the first packet sent by Client to Server
-type ConPacket struct {
+// ConnPacket is the first packet sent by Client to Server
+type ConnPacket struct {
 	protoName    string
 	protoLevel   ProtocolLevel
 	Username     string
@@ -34,143 +36,144 @@ type ConPacket struct {
 	WillMessage  []byte
 }
 
-// Type ConPacket'strategy type is CtrlConn
-func (c *ConPacket) Type() CtrlType {
+// Type ConnPacket'strategy type is CtrlConn
+func (c *ConnPacket) Type() CtrlType {
 	return CtrlConn
 }
 
-// Bytes encode ConPacket to bytes
-func (c *ConPacket) Bytes(buffer *bytes.Buffer) (err error) {
-	if buffer == nil || c == nil {
-		return
+// Bytes encode ConnPacket to bytes
+func (c *ConnPacket) Bytes(w *bufio.Writer) error {
+	if w == nil || c == nil {
+		return nil
 	}
 	// fixed header
 	// 0x01 0x00
-	buffer.WriteByte(CtrlConn << 4)
+	w.WriteByte(CtrlConn << 4)
 
 	payload := c.payload()
 	// remaining length
-	encodeRemainLength(10+payload.Len(), buffer)
+	writeRemainLength(10+len(payload), w)
 
 	// Protocol Name and level
 	// 0x00 0x04 'M' 'Q' 'T' 'T' 0x04
-	buffer.Write([]byte{0x00, 0x04})
-	buffer.Write(mqtt)
-	buffer.WriteByte(V311)
+	w.WriteByte(0x00)
+	w.WriteByte(0x04)
+	w.Write(mqtt)
+	w.WriteByte(V311)
 
 	// connect flags
-	buffer.WriteByte(c.flags())
+	w.WriteByte(c.flags())
 
 	// keepalive
-	buffer.WriteByte(byte(c.Keepalive >> 8))
-	buffer.WriteByte(byte(c.Keepalive))
+	w.WriteByte(byte(c.Keepalive >> 8))
+	w.WriteByte(byte(c.Keepalive))
 
-	_, err = payload.WriteTo(buffer)
-
-	return
+	w.Write(payload)
+	return w.Flush()
 }
 
-func (c *ConPacket) flags() byte {
-	var connectFlag byte
+func (c *ConnPacket) flags() byte {
+	var flag byte
 	if c.ClientID == "" {
 		c.CleanSession = true
 	}
 
 	if c.CleanSession {
-		connectFlag |= 0x02
+		flag |= 0x02
 	}
 
 	if c.IsWill {
-		connectFlag |= 0x04
-		connectFlag |= c.WillQos << 3
+		flag |= 0x04
+		flag |= c.WillQos << 3
 
 		if c.WillRetain {
-			connectFlag |= 0x20
+			flag |= 0x20
 		}
 	}
 
 	if c.Password != "" {
-		connectFlag |= 0x40
+		flag |= 0x40
 	}
 
 	if c.Username != "" {
-		connectFlag |= 0x80
+		flag |= 0x80
 	}
 
-	return connectFlag
+	return flag
 }
 
-func (c *ConPacket) payload() *bytes.Buffer {
-	result := &bytes.Buffer{}
+func (c *ConnPacket) payload() []byte {
 	// client id
-	encodeDataWithLen([]byte(c.ClientID), result)
+	result := encodeDataWithLen([]byte(c.ClientID))
 
 	// will topic and message
 	if c.IsWill {
-		encodeDataWithLen([]byte(c.WillTopic), result)
-		encodeDataWithLen(c.WillMessage, result)
+		result = append(result, encodeDataWithLen([]byte(c.WillTopic))...)
+		result = append(result, encodeDataWithLen(c.WillMessage)...)
 	}
 
 	if c.Username != "" {
-		encodeDataWithLen([]byte(c.Username), result)
+		result = append(result, encodeDataWithLen([]byte(c.Username))...)
 	}
 
 	if c.Password != "" {
-		encodeDataWithLen([]byte(c.Password), result)
+		result = append(result, encodeDataWithLen([]byte(c.Password))...)
 	}
 
 	return result
 }
 
-// ConAckPacket is the packet sent by the Server in response to a ConPacket
+// ConnAckPacket is the packet sent by the Server in response to a ConnPacket
 // received from a Client.
 //
-// The first packet sent from the Server to the Client MUST be a ConAckPacket
-type ConAckPacket struct {
+// The first packet sent from the Server to the Client MUST be a ConnAckPacket
+type ConnAckPacket struct {
 	Present bool
 	Code    ConnAckCode
 }
 
-// Type ConAckPacket'strategy type is CtrlConnAck
-func (c *ConAckPacket) Type() CtrlType {
+// Type ConnAckPacket'strategy type is CtrlConnAck
+func (c *ConnAckPacket) Type() CtrlType {
 	return CtrlConnAck
 }
 
-// Bytes encode ConAckPacket to bytes
-func (c *ConAckPacket) Bytes(buffer *bytes.Buffer) (err error) {
-	if buffer == nil || c == nil {
-		return
+// Bytes encode ConnAckPacket to bytes
+func (c *ConnAckPacket) Bytes(w *bufio.Writer) error {
+	if w == nil || c == nil {
+		return nil
 	}
 	// fixed header
 	// 0x02 0x00
-	buffer.WriteByte(CtrlConnAck << 4)
-	buffer.WriteByte(0x02)
+	w.WriteByte(CtrlConnAck << 4)
+	w.WriteByte(0x02)
 	// present flag
-	buffer.WriteByte(boolToByte(c.Present))
+	w.WriteByte(boolToByte(c.Present))
 
 	// response code
-	return buffer.WriteByte(c.Code)
+	w.WriteByte(c.Code)
+	return w.Flush()
 }
 
 var (
-	// DisConPacket is the final instance of disConPacket
-	DisConPacket = &disConPacket{}
+	// DisConnPacket is the final instance of disConnPacket
+	DisConnPacket = &disConnPacket{}
 )
 
-// disConPacket is the final Control Packet sent from the Client to the Server.
+// disConnPacket is the final Control Packet sent from the Client to the Server.
 // It indicates that the Client is disconnecting cleanly.
-type disConPacket struct {
+type disConnPacket struct {
 }
 
-func (s *disConPacket) Type() CtrlType {
+func (s *disConnPacket) Type() CtrlType {
 	return CtrlDisConn
 }
 
-func (s *disConPacket) Bytes(buffer *bytes.Buffer) (err error) {
-	if buffer == nil || s == nil {
-		return
+func (s *disConnPacket) Bytes(w *bufio.Writer) error {
+	if w == nil || s == nil {
+		return nil
 	}
 	// fixed header
-	buffer.WriteByte(CtrlDisConn << 4)
-	return buffer.WriteByte(0x00)
+	w.WriteByte(CtrlDisConn << 4)
+	w.WriteByte(0x00)
+	return w.Flush()
 }

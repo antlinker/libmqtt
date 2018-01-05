@@ -17,6 +17,7 @@
 package libmqtt
 
 import (
+	"bufio"
 	"bytes"
 	"testing"
 )
@@ -32,28 +33,26 @@ func TestDecodeRemainLength(t *testing.T) {
 	buffer.Reset()
 }
 
-func BenchmarkDecodeRemainLength(b *testing.B) {
-
-}
-
 func TestDecodeOnePacket(t *testing.T) {
 	// MQTT packet should work
-	targetBytes := connWillBytes
-	buffer := &bytes.Buffer{}
-	if _, err := buffer.Write(targetBytes); err != nil {
+	targetBytes := testConnWillMsgBytes
+	buf := &bytes.Buffer{}
+
+	writer := bufio.NewWriter(buf)
+	if _, err := buf.Write(targetBytes); err != nil {
 		t.Log(err)
 		t.Fail()
 	} else {
-		pkt, err := DecodeOnePacket(buffer)
+		pkt, err := DecodeOnePacket(buf)
 		if err != nil {
 			t.Log(err)
 			t.Fail()
 		}
-		buffer.Reset()
+		buf.Reset()
 		switch pkt.(type) {
-		case *ConPacket:
-			pkt.Bytes(buffer)
-			pktBytes := buffer.Bytes()
+		case *ConnPacket:
+			pkt.Bytes(writer)
+			pktBytes := buf.Bytes()
 			if bytes.Compare(pktBytes, targetBytes) != 0 {
 				t.Log(pktBytes)
 				t.Fail()
@@ -65,7 +64,7 @@ func TestDecodeOnePacket(t *testing.T) {
 	}
 
 	// malformed MQTT packets should fail
-	buffer.Reset()
+	buf.Reset()
 	malformedConnBytes := []byte{
 		0x10,                 // fixed header: conn:0
 		38,                   // remaining length: 38
@@ -89,11 +88,11 @@ func TestDecodeOnePacket(t *testing.T) {
 		0, 4, 117, 115, 101, 114, // Username: "user"
 		0, 4, 112, 97, 115, 115, // Password: "pass"
 	}
-	if _, err := buffer.Write(malformedConnBytes); err != nil {
+	if _, err := buf.Write(malformedConnBytes); err != nil {
 		t.Log(err)
 		t.Fail()
 	} else {
-		if _, err := DecodeOnePacket(buffer); err == nil {
+		if _, err := DecodeOnePacket(buf); err == nil {
 			t.Log("decoded conn packet, should not happen")
 			t.Fail()
 		}
@@ -104,7 +103,7 @@ func BenchmarkDecodeOnePacket(b *testing.B) {
 	b.StopTimer()
 	buf := &bytes.Buffer{}
 	for i := 0; i < b.N; i++ {
-		buf.Write(connWillBytes)
+		buf.Write(testConnWillMsgBytes)
 	}
 
 	b.StartTimer()

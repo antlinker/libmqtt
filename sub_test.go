@@ -15,3 +15,29 @@
  */
 
 package libmqtt
+
+import (
+	"testing"
+)
+
+func TestSubscribePacket_Bytes(t *testing.T) {
+	for i, p := range testSubMsgs {
+		testBytes(p, testSubMsgBytes[i], t)
+	}
+}
+
+func TestSubAckPacket_Bytes(t *testing.T) {
+	for i, p := range testSubAckMsgs {
+		testBytes(p, testSubAckMsgBytes[i], t)
+	}
+}
+
+func TestUnSubPacket_Bytes(t *testing.T) {
+	for i, p := range testUnSubMsgs {
+		testBytes(p, testUnSubMsgBytes[i], t)
+	}
+}
+
+func TestUnSubAckPacket_Bytes(t *testing.T) {
+	testBytes(testUnSubAckMsg, testUnSubAckMsgBytes, t)
+}

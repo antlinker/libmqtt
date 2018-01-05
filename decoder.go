@@ -43,7 +43,7 @@ func DecodeOnePacket(reader io.Reader) (pkt Packet, err error) {
 		case CtrlPingResp:
 			pkt = PingRespPacket
 		case CtrlDisConn:
-			pkt = DisConPacket
+			pkt = DisConnPacket
 		default:
 			err = ErrBadPacket
 		}
@@ -73,7 +73,7 @@ func DecodeOnePacket(reader io.Reader) (pkt Packet, err error) {
 		}
 		hasUsername := next[1]&0x80 == 0x80
 		hasPassword := next[1]&0x40 == 0x40
-		tmpPkt := &ConPacket{
+		tmpPkt := &ConnPacket{
 			protoName:    protocol,
 			protoLevel:   next[0],
 			CleanSession: next[1]&0x02 == 0x02,
@@ -105,7 +105,7 @@ func DecodeOnePacket(reader io.Reader) (pkt Packet, err error) {
 
 		pkt = tmpPkt
 	case CtrlConnAck:
-		pkt = &ConAckPacket{
+		pkt = &ConnAckPacket{
 			Present: body[0]&0x01 == 0x01,
 			Code:    body[1],
 		}

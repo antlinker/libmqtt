@@ -17,6 +17,7 @@
 package libmqtt
 
 import (
+	"bufio"
 	"bytes"
 	"crypto/tls"
 	"crypto/x509"
@@ -226,7 +227,7 @@ func NewClient(options ...Option) (Client, error) {
 	}
 
 	c.msgC = make(chan *message)
-	c.sendC = make(chan *bytes.Buffer, c.options.sendChanSize)
+	c.sendC = make(chan Packet, c.options.sendChanSize)
 	c.recvC = make(chan *PublishPacket, c.options.recvChanSize)
 
 	return c, nil
@@ -238,17 +239,17 @@ type clientOptions struct {
 	recvChanSize    int           // recv channel size
 	servers         []string      // server address strings
 	dialTimeout     time.Duration // dial timeout in second
-	clientID        string        // used by ConPacket
-	username        string        // used by ConPacket
-	password        string        // used by ConPacket
-	keepalive       time.Duration // used by ConPacket (time in second)
+	clientID        string        // used by ConnPacket
+	username        string        // used by ConnPacket
+	password        string        // used by ConnPacket
+	keepalive       time.Duration // used by ConnPacket (time in second)
 	keepaliveFactor float64       // used for reasonable amount time to close conn if no ping resp
-	cleanSession    bool          // used by ConPacket
-	isWill          bool          // used by ConPacket
-	willTopic       string        // used by ConPacket
-	willPayload     []byte        // used by ConPacket
-	willQos         byte          // used by ConPacket
-	willRetain      bool          // used by ConPacket
+	cleanSession    bool          // used by ConnPacket
+	isWill          bool          // used by ConnPacket
+	willTopic       string        // used by ConnPacket
+	willPayload     []byte        // used by ConnPacket
+	willQos         byte          // used by ConnPacket
+	willRetain      bool          // used by ConnPacket
 	tlsConfig       *tls.Config   // tls config with client side cert
 	maxDelay        time.Duration
 	firstDelay      time.Duration
@@ -291,9 +292,8 @@ type client struct {
 	options *clientOptions      // client connection options
 	subs    *sync.Map           // Topic(s) -> []TopicHandler
 	conn    *sync.Map           // ServerAddr -> connection
-	bufPool *sync.Pool          // a pool for buffer
 	msgC    chan *message       // error channel
-	sendC   chan *bytes.Buffer  // Pub channel for sending publish packet to server
+	sendC   chan Packet         // Pub channel for sending publish packet to server
 	recvC   chan *PublishPacket // recv channel for server pub receiving
 	idGen   *idGenerator        // Packet id generator
 	router  TopicRouter         // Topic router
@@ -327,7 +327,6 @@ func defaultClient() *client {
 		idGen:   newIDGenerator(),
 		workers: &sync.WaitGroup{},
 		persist: &NonePersist{},
-		bufPool: &sync.Pool{New: func() interface{} { return &bytes.Buffer{} }},
 	}
 }
 
@@ -383,7 +382,6 @@ func (c *client) Connect(h ConnHandler) {
 
 // Publish message(s) to topic(s), one to one
 func (c *client) Publish(msg ...*PublishPacket) {
-	buf := c.getBuf()
 	for _, m := range msg {
 		if m == nil {
 			continue
@@ -394,15 +392,12 @@ func (c *client) Publish(msg ...*PublishPacket) {
 			p.Qos = Qos2
 		}
 
-		if p.Qos != Qos0 {
+		if p.Qos != Qos0 && p.PacketID == 0 {
 			p.PacketID = c.idGen.next(p)
 			c.persist.Store(sendKey(p.PacketID), p)
-		} else {
-			c.msgC <- newPubMsg(p.TopicName, nil)
 		}
-		p.Bytes(buf)
+		c.sendC <- p
 	}
-	c.sendC <- buf
 }
 
 // SubScribe topic(s)
@@ -410,10 +405,7 @@ func (c *client) Subscribe(topics ...*Topic) {
 	lg.d("CLIENT subscribe, topic(s) =", topics)
 	s := &SubscribePacket{Topics: topics}
 	s.PacketID = c.idGen.next(s)
-	buf := c.getBuf()
-	s.Bytes(buf)
-	c.sendC <- buf
-	c.persist.Store(sendKey(s.PacketID), s)
+	c.sendC <- s
 }
 
 // UnSubscribe topic(s)
@@ -426,10 +418,7 @@ func (c *client) UnSubscribe(topics ...string) {
 		TopicNames: topics,
 	}
 	u.PacketID = c.idGen.next(u)
-	buf := c.getBuf()
-	u.Bytes(buf)
-	c.sendC <- buf
-	c.persist.Store(sendKey(u.PacketID), u)
+	c.sendC <- u
 }
 
 // Wait will wait for all connection to exit
@@ -521,6 +510,7 @@ func (c *client) connect(server string, h ConnHandler, reconnectDelay time.Durat
 		parent:     c,
 		name:       server,
 		conn:       conn,
+		connW:      bufio.NewWriter(conn),
 		clientBuf:  &bytes.Buffer{},
 		sendBuf:    &bytes.Buffer{},
 		keepaliveC: make(chan int),
@@ -532,7 +522,7 @@ func (c *client) connect(server string, h ConnHandler, reconnectDelay time.Durat
 	go connImpl.handleRecv()
 	go connImpl.handleClientSend()
 
-	connImpl.send(&ConPacket{
+	connImpl.send(&ConnPacket{
 		Username:     c.options.username,
 		Password:     c.options.password,
 		ClientID:     c.options.clientID,
@@ -549,7 +539,7 @@ func (c *client) connect(server string, h ConnHandler, reconnectDelay time.Durat
 	case pkt, more := <-connImpl.netRecvC:
 		if more {
 			if pkt.Type() == CtrlConnAck {
-				p := pkt.(*ConAckPacket)
+				p := pkt.(*ConnAckPacket)
 				if p.Code != ConnAccepted {
 					if h != nil {
 						h(server, p.Code, nil)
@@ -598,25 +588,13 @@ func (c *client) connect(server string, h ConnHandler, reconnectDelay time.Durat
 	}
 }
 
-// get a buffer from buf pool
-func (c *client) getBuf() *bytes.Buffer {
-	return c.bufPool.Get().(*bytes.Buffer)
-}
-
-// put back the buffer
-func (c *client) putBuf(buf *bytes.Buffer) {
-	if buf == nil {
-		return
-	}
-	c.bufPool.Put(buf)
-}
-
 // connImpl is the wrapper of connection to server
 // tend to actual packet send and receive
 type connImpl struct {
 	parent     *client       // client which created this connection
 	name       string        // server addr info
 	conn       net.Conn      // connection to server
+	connW      *bufio.Writer // make buffered connection
 	sendBuf    *bytes.Buffer // buffer for logic packet send
 	clientBuf  *bytes.Buffer // buffer for client packet send
 	logicSendC chan Packet   // logic send channel
@@ -790,34 +768,34 @@ func (c *connImpl) keepalive() {
 // close this connection
 func (c *connImpl) close() {
 	lg.i("NET connection to server closed, remote =", c.name)
-	c.send(DisConPacket)
+	c.send(DisConnPacket)
 }
 
 // handle client message send
 func (c *connImpl) handleClientSend() {
-	for buf := range c.parent.sendC {
-		_, err := buf.WriteTo(c.conn)
-		if err != nil {
-			// DO NOT NOTIFY net err HERE
-			// ALWAYS DETECT net err in receive
-			buf.Reset()
+	for pkt := range c.parent.sendC {
+		if err := pkt.Bytes(c.connW); err != nil {
 			break
 		}
 
-		c.parent.putBuf(buf)
+		switch pkt.Type() {
+		case CtrlPublish:
+			c.parent.msgC <- newPubMsg(pkt.(*PublishPacket).TopicName, nil)
+		case CtrlSubscribe:
+			c.parent.msgC <- newSubMsg(pkt.(*SubscribePacket).Topics, nil)
+		case CtrlUnSub:
+			c.parent.msgC <- newUnSubMsg(pkt.(*UnSubPacket).TopicNames, nil)
+		}
 	}
+
 }
 
 // handle mqtt logic control packet send
 func (c *connImpl) handleLogicSend() {
 	for logicPkt := range c.logicSendC {
-		logicPkt.Bytes(c.sendBuf)
-		if _, err := c.sendBuf.WriteTo(c.conn); err != nil {
-			// DO NOT NOTIFY net err HERE
-			// ALWAYS DETECT net err in receive
+		if err := logicPkt.Bytes(c.connW); err != nil {
 			break
 		}
-
 		switch logicPkt.Type() {
 		case CtrlPubRel:
 			c.parent.persist.Store(sendKey(logicPkt.(*PubRelPacket).PacketID), logicPkt)

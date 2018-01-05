@@ -20,11 +20,11 @@ import (
 	lib "github.com/goiiot/libmqtt"
 )
 
-// RestRouter is a HTTP RESTFul URL style router
+// HttpRouter is a HTTP URL style router
 type HttpRouter struct {
 }
 
-// Name is the name of router
+// Name of HttpRouter is "HttpRouter"
 func (r *HttpRouter) Name() string {
 	if r == nil {
 		return "<nil>"
@@ -33,7 +33,7 @@ func (r *HttpRouter) Name() string {
 	return "HttpRouter"
 }
 
-// Handle will register the topic with handler
+// Handle the topic with TopicHandler h
 func (r *HttpRouter) Handle(topic string, h lib.TopicHandler) {
 
 }

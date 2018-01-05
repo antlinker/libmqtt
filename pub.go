@@ -16,7 +16,9 @@
 
 package libmqtt
 
-import "bytes"
+import (
+	"bufio"
+)
 
 // PublishPacket is sent from a Client to a Server or from Server to a Client
 // to transport an Application Message.
@@ -35,28 +37,26 @@ func (p *PublishPacket) Type() CtrlType {
 }
 
 // Bytes encode PublishPacket into buffer
-func (p *PublishPacket) Bytes(buffer *bytes.Buffer) (err error) {
-	if buffer == nil || p == nil {
-		return
+func (p *PublishPacket) Bytes(w *bufio.Writer) error {
+	if w == nil || p == nil {
+		return nil
 	}
 	// fixed header
-	buffer.WriteByte(CtrlPublish<<4 | boolToByte(p.IsDup)<<3 |
-		boolToByte(p.IsRetain) | p.Qos<<1)
+	w.WriteByte(CtrlPublish<<4 | boolToByte(p.IsDup)<<3 | boolToByte(p.IsRetain) | p.Qos<<1)
+
 	payload := p.payload()
-	encodeRemainLength(payload.Len(), buffer)
-	_, err = payload.WriteTo(buffer)
-	return
+	writeRemainLength(len(payload), w)
+
+	w.Write(payload)
+	return w.Flush()
 }
 
-func (p *PublishPacket) payload() (result *bytes.Buffer) {
-	result = &bytes.Buffer{}
-	encodeDataWithLen([]byte(p.TopicName), result)
+func (p *PublishPacket) payload() []byte {
+	data := encodeDataWithLen([]byte(p.TopicName))
 	if p.Qos > Qos0 {
-		result.WriteByte(byte(p.PacketID >> 8))
-		result.WriteByte(byte(p.PacketID))
+		data = append(data, byte(p.PacketID>>8), byte(p.PacketID))
 	}
-	result.Write(p.Payload)
-	return
+	return append(data, p.Payload...)
 }
 
 // PubAckPacket is the response to a PublishPacket with QoS level 1.
@@ -70,18 +70,19 @@ func (p *PubAckPacket) Type() CtrlType {
 }
 
 // Bytes encode PubAckPacket into buffer
-func (p *PubAckPacket) Bytes(buffer *bytes.Buffer) (err error) {
-	if buffer == nil || p == nil {
-		return
+func (p *PubAckPacket) Bytes(w *bufio.Writer) error {
+	if w == nil || p == nil {
+		return nil
 	}
 
 	// fixed header
-	buffer.WriteByte(CtrlPubAck << 4)
+	w.WriteByte(CtrlPubAck << 4)
 	// remaining length
-	buffer.WriteByte(0x02)
+	w.WriteByte(0x02)
 	// packet id
-	buffer.WriteByte(byte(p.PacketID >> 8))
-	return buffer.WriteByte(byte(p.PacketID))
+	w.WriteByte(byte(p.PacketID >> 8))
+	w.WriteByte(byte(p.PacketID))
+	return w.Flush()
 }
 
 // PubRecvPacket is the response to a PublishPacket with QoS 2.
@@ -96,18 +97,19 @@ func (p *PubRecvPacket) Type() CtrlType {
 }
 
 // Bytes encode PubRecvPacket into buffer
-func (p *PubRecvPacket) Bytes(buffer *bytes.Buffer) (err error) {
-	if buffer == nil || p == nil {
-		return
+func (p *PubRecvPacket) Bytes(w *bufio.Writer) error {
+	if w == nil || p == nil {
+		return nil
 	}
 
 	// fixed header
-	buffer.WriteByte(CtrlPubRecv << 4)
+	w.WriteByte(CtrlPubRecv << 4)
 	// remaining length
-	buffer.WriteByte(0x02)
+	w.WriteByte(0x02)
 	// packet id
-	buffer.WriteByte(byte(p.PacketID >> 8))
-	return buffer.WriteByte(byte(p.PacketID))
+	w.WriteByte(byte(p.PacketID >> 8))
+	w.WriteByte(byte(p.PacketID))
+	return w.Flush()
 }
 
 // PubRelPacket is the response to a PubRecvPacket.
@@ -122,17 +124,18 @@ func (p *PubRelPacket) Type() CtrlType {
 }
 
 // Bytes encode PubRelPacket into buffer
-func (p *PubRelPacket) Bytes(buffer *bytes.Buffer) (err error) {
-	if buffer == nil || p == nil {
-		return
+func (p *PubRelPacket) Bytes(w *bufio.Writer) error {
+	if w == nil || p == nil {
+		return nil
 	}
 
-	buffer.WriteByte(CtrlPubRel<<4 | 0x02)
+	w.WriteByte(CtrlPubRel<<4 | 0x02)
 	// remaining length
-	buffer.WriteByte(0x02)
+	w.WriteByte(0x02)
 	// packet id
-	buffer.WriteByte(byte(p.PacketID >> 8))
-	return buffer.WriteByte(byte(p.PacketID))
+	w.WriteByte(byte(p.PacketID >> 8))
+	w.WriteByte(byte(p.PacketID))
+	return w.Flush()
 }
 
 // PubCompPacket is the response to a PubRelPacket.
@@ -147,15 +150,16 @@ func (p *PubCompPacket) Type() CtrlType {
 }
 
 // Bytes encode PubCompPacket into buffer
-func (p *PubCompPacket) Bytes(buffer *bytes.Buffer) (err error) {
-	if buffer == nil || p == nil {
-		return
+func (p *PubCompPacket) Bytes(w *bufio.Writer) error {
+	if w == nil || p == nil {
+		return nil
 	}
 	// fixed header
-	buffer.WriteByte(CtrlPubComp << 4)
+	w.WriteByte(CtrlPubComp << 4)
 	// remaining length
-	buffer.WriteByte(0x02)
+	w.WriteByte(0x02)
 	// packet id
-	buffer.WriteByte(byte(p.PacketID >> 8))
-	return buffer.WriteByte(byte(p.PacketID))
+	w.WriteByte(byte(p.PacketID >> 8))
+	w.WriteByte(byte(p.PacketID))
+	return w.Flush()
 }

@@ -17,7 +17,7 @@
 package libmqtt
 
 import (
-	"bytes"
+	"bufio"
 )
 
 // Packet is MQTT control packet
@@ -25,8 +25,8 @@ type Packet interface {
 	// Type return the packet type
 	Type() CtrlType
 
-	// Bytes dump a mqtt Packet object to mqtt bytes into provided buffer
-	Bytes(*bytes.Buffer) error
+	// Bytes
+	Bytes(*bufio.Writer) error
 }
 
 // Topic for both topic name and topic qos
@@ -81,8 +81,12 @@ const (
 // ProtocolLevel MQTT Protocol
 type ProtocolLevel = byte
 
-// V311 means MQTT 3.1.1
-const V311 ProtocolLevel = 4
+const (
+	// V311 means MQTT 3.1.1
+	V311 ProtocolLevel = 4
+	// V5 means MQTT 5
+	V5 ProtocolLevel = 5
+)
 
 // QosLevel is either 0, 1, 2
 type QosLevel = byte

@@ -15,3 +15,29 @@
  */
 
 package libmqtt
+
+import (
+	"testing"
+)
+
+func TestPublishPacket_Bytes(t *testing.T) {
+	for i, p := range testPubMsgs {
+		testBytes(p, testPubMsgBytes[i], t)
+	}
+}
+
+func TestPubAckPacket_Bytes(t *testing.T) {
+	testBytes(testPubAckMsg, testPubAckMsgBytes, t)
+}
+
+func TestPubRecvPacket_Bytes(t *testing.T) {
+	testBytes(testPubRecvMsg, testPubRecvMsgBytes, t)
+}
+
+func TestPubRelPacket_Bytes(t *testing.T) {
+	testBytes(testPubRelMsg, testPubRelMsgBytes, t)
+}
+
+func TestPubCompPacket_Bytes(t *testing.T) {
+	testBytes(testPubCompMsg, testPubCompMsgBytes, t)
+}
