@@ -294,8 +294,7 @@ func TestClient_UnSubscribe(t *testing.T) {
 
 func TestClient_Reconnect(t *testing.T) {
 	c := plainClient(t, nil).(*client)
-	count := &atomic.Value{}
-	count.Store(0)
+	var count uint32
 	c.Connect(func(server string, code ConnAckCode, err error) {
 		if err != nil {
 			t.Log(err)
@@ -307,13 +306,13 @@ func TestClient_Reconnect(t *testing.T) {
 			t.FailNow()
 		}
 
-		if count.Load().(int) < 3 {
+		if atomic.LoadUint32(&count) < 3 {
 			c.conn.Range(func(key, value interface{}) bool {
 				v := value.(*connImpl)
 				v.conn.Close()
 				return true
 			})
-			count.Store(count.Load().(int) + 1)
+			atomic.AddUint32(&count, 1)
 		} else {
 			c.Destroy(true)
 		}

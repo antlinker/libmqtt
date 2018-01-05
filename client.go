@@ -33,21 +33,6 @@ var (
 	ErrTimeOut = errors.New("connection timeout ")
 )
 
-// BackoffOption defines the parameters for the reconnecting backoff strategy.
-type BackoffOption struct {
-	// MaxDelay defines the upper bound of backoff delay,
-	// which is time in second.
-	MaxDelay time.Duration
-
-	// FirstDelay is the time to wait before retrying after the first failure,
-	// also time in second.
-	FirstDelay time.Duration
-
-	// Factor is applied to the backoff after each retry.
-	// e.g. FirstDelay = 1 and Factor = 2, then the SecondDelay is 2, the ThirdDelay is 4s
-	Factor float64
-}
-
 // Option is client option for connection options
 type Option func(*client) error
 
@@ -92,6 +77,10 @@ func WithKeepalive(keepalive uint16, factor float64) Option {
 }
 
 // WithBackoffStrategy will set reconnect backoff strategy
+// firstDelay is the time to wait before retrying after the first failure
+// maxDelay defines the upper bound of backoff delay
+// factor is applied to the backoff after each retry.
+// e.g. FirstDelay = 1s and Factor = 2, then the SecondDelay is 2s, the ThirdDelay is 4s
 func WithBackoffStrategy(firstDelay, maxDelay time.Duration, factor float64) Option {
 	return func(c *client) error {
 		if firstDelay < time.Millisecond {
@@ -106,12 +95,9 @@ func WithBackoffStrategy(firstDelay, maxDelay time.Duration, factor float64) Opt
 			factor = 1
 		}
 
-		c.options.backoffOption = &BackoffOption{
-			FirstDelay: firstDelay,
-			MaxDelay:   maxDelay,
-			Factor:     factor,
-		}
-
+		c.options.firstDelay = firstDelay
+		c.options.maxDelay = maxDelay
+		c.options.backoffFactor = factor
 		return nil
 	}
 }
@@ -138,7 +124,7 @@ func WithWill(topic string, qos QosLevel, retain bool, payload []byte) Option {
 
 // WithServer adds servers as client server
 // Just use "ip:port" or "domain.name:port"
-// Only TCP connection supported for now
+// However, only TCP connection supported for now
 func WithServer(servers ...string) Option {
 	return func(c *client) error {
 		c.options.servers = servers
@@ -248,23 +234,25 @@ func NewClient(options ...Option) (Client, error) {
 
 // clientOptions is the options for client to connect, reconnect, disconnect
 type clientOptions struct {
-	sendChanSize    int            // send channel size
-	recvChanSize    int            // recv channel size
-	servers         []string       // server address strings
-	dialTimeout     time.Duration  // dial timeout in second
-	clientID        string         // used by ConPacket
-	username        string         // used by ConPacket
-	password        string         // used by ConPacket
-	keepalive       time.Duration  // used by ConPacket (time in second)
-	keepaliveFactor float64        // used for reasonable amount time to close conn if no ping resp
-	cleanSession    bool           // used by ConPacket
-	isWill          bool           // used by ConPacket
-	willTopic       string         // used by ConPacket
-	willPayload     []byte         // used by ConPacket
-	willQos         byte           // used by ConPacket
-	willRetain      bool           // used by ConPacket
-	tlsConfig       *tls.Config    // tls config with client side cert
-	backoffOption   *BackoffOption // backoff option for client reconnection
+	sendChanSize    int           // send channel size
+	recvChanSize    int           // recv channel size
+	servers         []string      // server address strings
+	dialTimeout     time.Duration // dial timeout in second
+	clientID        string        // used by ConPacket
+	username        string        // used by ConPacket
+	password        string        // used by ConPacket
+	keepalive       time.Duration // used by ConPacket (time in second)
+	keepaliveFactor float64       // used for reasonable amount time to close conn if no ping resp
+	cleanSession    bool          // used by ConPacket
+	isWill          bool          // used by ConPacket
+	willTopic       string        // used by ConPacket
+	willPayload     []byte        // used by ConPacket
+	willQos         byte          // used by ConPacket
+	willRetain      bool          // used by ConPacket
+	tlsConfig       *tls.Config   // tls config with client side cert
+	maxDelay        time.Duration
+	firstDelay      time.Duration
+	backoffFactor   float64
 }
 
 // Client act as a mqtt client
@@ -324,13 +312,11 @@ type client struct {
 func defaultClient() *client {
 	return &client{
 		options: &clientOptions{
-			sendChanSize: 128,
-			recvChanSize: 128,
-			backoffOption: &BackoffOption{
-				MaxDelay:   2 * time.Minute, // default max retry delay is 2min
-				FirstDelay: 5 * time.Second, // first retry delay is 5s
-				Factor:     1.5,
-			},
+			sendChanSize:    128,
+			recvChanSize:    128,
+			maxDelay:        2 * time.Minute, // default max retry delay is 2min
+			firstDelay:      5 * time.Second, // first retry delay is 5s
+			backoffFactor:   1.5,
 			dialTimeout:     20 * time.Second, // default timeout when dial to server
 			keepalive:       2 * time.Minute,  // default keepalive interval is 2min
 			keepaliveFactor: 1.5,              // default reasonable amount of time 3min
@@ -391,7 +377,7 @@ func (c *client) Connect(h ConnHandler) {
 
 	for _, s := range c.options.servers {
 		c.workers.Add(1)
-		go c.connect(s, h, 0)
+		go c.connect(s, h, c.options.firstDelay)
 	}
 }
 
@@ -457,7 +443,7 @@ func (c *client) Wait() {
 func (c *client) Destroy(force bool) {
 	lg.d("CLIENT destroying client with force =", force)
 	// TODO close all channel properly
-	c.options.backoffOption = nil
+	c.options.backoffFactor = -1
 	if force {
 		c.conn.Range(func(k, v interface{}) bool {
 			va := v.(*connImpl)
@@ -598,14 +584,14 @@ func (c *client) connect(server string, h ConnHandler, reconnectDelay time.Durat
 	c.conn.Store(server, connImpl)
 	connImpl.logic()
 
-	if c.options.backoffOption != nil {
+	if c.options.backoffFactor > 1 {
 		c.workers.Add(1)
 		lg.w("CLIENT reconnecting to server =", server, "delay =", reconnectDelay)
 		go func() {
 			time.Sleep(reconnectDelay)
-			reconnectDelay = time.Duration(float64(reconnectDelay) * c.options.backoffOption.Factor)
-			if reconnectDelay > c.options.backoffOption.MaxDelay {
-				reconnectDelay = c.options.backoffOption.MaxDelay
+			reconnectDelay = time.Duration(float64(reconnectDelay) * c.options.backoffFactor)
+			if reconnectDelay > c.options.maxDelay {
+				reconnectDelay = c.options.maxDelay
 			}
 			c.connect(server, h, reconnectDelay)
 		}()
