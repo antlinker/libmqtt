@@ -17,6 +17,7 @@
 package extension
 
 import (
+	"bufio"
 	"bytes"
 	"strings"
 
@@ -39,16 +40,19 @@ func NewRedisPersist(conn *redis.Client, mainKey string) *RedisPersist {
 		mainKey = defaultRedisKey
 	}
 
+	buf := &bytes.Buffer{}
 	return &RedisPersist{
 		conn:    conn,
 		mainKey: mainKey,
-		buf:     &bytes.Buffer{},
+		buf:     buf,
+		w:       bufio.NewWriter(buf),
 	}
 }
 
 // RedisPersist defines the persist method with redis
 type RedisPersist struct {
 	conn    *redis.Client
+	w       *bufio.Writer
 	buf     *bytes.Buffer
 	mainKey string
 }
@@ -68,7 +72,7 @@ func (r *RedisPersist) Store(key string, p lib.Packet) error {
 		return nil
 	}
 
-	if p.Bytes(r.buf) != nil {
+	if p.Bytes(r.w) != nil {
 		if ok, err := r.conn.HSet(r.mainKey, key, r.buf.String()).Result(); !ok {
 			return err
 		}
