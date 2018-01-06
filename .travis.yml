@@ -7,9 +7,11 @@ services:
 
 go:
   - 1.9.x
+  - tip
 
 # install emqttd docker
 before_install:
+  - go get -t -v ./...
   - sudo apt-get -qq update
   - sudo apt-get install -y curl unzip
   - curl -fsSL http://emqtt.com/static/brokers/emqttd-docker-v2.3.1.zip -o emqttd-docker-v2.3.1.zip
@@ -23,3 +25,6 @@ before_script:
 
 script:
   - make test
+
+after_success:
+  - bash <(curl -s https://codecov.io/bash)

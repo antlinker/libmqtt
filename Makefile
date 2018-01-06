@@ -1,7 +1,7 @@
 .PHONY: test lib client clean fuzz-test
 
 test:
-	go test -v -run=. -count=1
+	go test -v -run=. -count=1 -coverprofile=coverage.txt -covermode=atomic
 
 .PHONY: all-lib c-lib java-lib py-lib \
 		clean-c-lib clean-java-lib clean-py-lib

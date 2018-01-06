@@ -18,7 +18,6 @@ package benchmark
 
 import (
 	"net/url"
-	"sync/atomic"
 	"testing"
 
 	pah "github.com/eclipse/paho.mqtt.golang"
@@ -49,13 +48,13 @@ var (
 			"1234567890" + "1234567890" + "1234567890" + "1234567890" + "1234567890" +
 			"1234567890" + "1234567890" + "1234567890" + "1234567890" + "1234567890" +
 			"1234567890" + "1234567890" + "1234567890" + "1234567890" + "1234567890" +
-			"12345")
+			"12345",
+	)
 )
 
 func BenchmarkLibmqttClient(b *testing.B) {
 	b.N = testPubCount
 	b.ReportAllocs()
-	var count uint32
 	var client lib.Client
 	var err error
 
@@ -70,22 +69,6 @@ func BenchmarkLibmqttClient(b *testing.B) {
 		b.FailNow()
 	}
 
-	client.HandleUnSub(func(topic []string, err error) {
-		if err != nil {
-			b.Log(err)
-			b.FailNow()
-		}
-		client.Destroy(true)
-	})
-	client.HandlePub(func(topic string, err error) {
-		if err != nil {
-			b.FailNow()
-		}
-		atomic.AddUint32(&count, 1)
-		if atomic.LoadUint32(&count) == testPubCount {
-			client.UnSubscribe(topic)
-		}
-	})
 	client.Connect(func(server string, code lib.ConnAckCode, err error) {
 		if err != nil {
 			b.Log(err)
@@ -95,6 +78,7 @@ func BenchmarkLibmqttClient(b *testing.B) {
 			b.FailNow()
 		}
 
+		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
 			client.Publish(&lib.PublishPacket{
 				TopicName: testTopic,
@@ -102,8 +86,9 @@ func BenchmarkLibmqttClient(b *testing.B) {
 				Payload:   testTopicMsg,
 			})
 		}
+		client.UnSubscribe(testTopic)
+		client.Destroy(true)
 	})
-	b.ResetTimer()
 	client.Wait()
 }
 
