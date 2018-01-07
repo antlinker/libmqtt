@@ -17,10 +17,23 @@
 package libmqtt
 
 import (
+	"bufio"
 	"bytes"
+	"errors"
+	"io/ioutil"
+	"os"
+	"path"
+	"path/filepath"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
+)
+
+var (
+	// PacketDroppedByStrategy used when persist store packet while strategy
+	// don't allow that persist
+	PacketDroppedByStrategy = errors.New("packet persist dropped by strategy ")
 )
 
 // PersistStrategy defines the details to be complied in persist methods
@@ -79,32 +92,23 @@ type PersistMethod interface {
 }
 
 // NonePersist defines no persist storage
-type NonePersist struct{}
+var NonePersist = &nonePersist{}
 
-// Name of NonePersist is "NonePersist"
-func (n *NonePersist) Name() string { return "NonePersist" }
+type nonePersist struct{}
 
-// Store nothing
-func (n *NonePersist) Store(key string, p Packet) error { return nil }
-
-// Load nothing
-func (n *NonePersist) Load(key string) (Packet, bool) { return nil, false }
-
-// Range nothing
-func (n *NonePersist) Range(func(key string, p Packet) bool) {}
-
-// Delete nothing
-func (n *NonePersist) Delete(key string) error { return nil }
-
-// Destroy nothing
-func (n *NonePersist) Destroy() error { return nil }
+func (n *nonePersist) Name() string                          { return "nonePersist" }
+func (n *nonePersist) Store(key string, p Packet) error      { return nil }
+func (n *nonePersist) Load(key string) (Packet, bool)        { return nil, false }
+func (n *nonePersist) Range(func(key string, p Packet) bool) {}
+func (n *nonePersist) Delete(key string) error               { return nil }
+func (n *nonePersist) Destroy() error                        { return nil }
 
 // NewMemPersist create a in memory persist method with provided strategy
 // if no strategy provided (nil), then the default strategy will be used
 func NewMemPersist(strategy *PersistStrategy) *MemPersist {
 	p := &MemPersist{
-		data:  &sync.Map{},
-		count: 0,
+		data: &sync.Map{},
+		n:    0,
 	}
 
 	if strategy == nil {
@@ -118,7 +122,7 @@ func NewMemPersist(strategy *PersistStrategy) *MemPersist {
 // MemPersist is the in memory persist method
 type MemPersist struct {
 	data     *sync.Map
-	count    uint32
+	n        uint32
 	strategy *PersistStrategy
 }
 
@@ -137,13 +141,14 @@ func (m *MemPersist) Store(key string, p Packet) error {
 	}
 
 	if m.strategy.MaxCount > 0 &&
-		atomic.LoadUint32(&m.count) >= m.strategy.MaxCount &&
+		atomic.LoadUint32(&m.n) >= m.strategy.MaxCount &&
 		m.strategy.DropOnExceed {
-		return nil
+		// packet dropped
+		return PacketDroppedByStrategy
 	}
 
 	if _, loaded := m.data.LoadOrStore(key, p); !loaded {
-		atomic.AddUint32(&m.count, 1)
+		atomic.AddUint32(&m.n, 1)
 	} else if m.strategy.DuplicateReplace {
 		m.data.Store(key, p)
 	}
@@ -198,27 +203,49 @@ func (m *MemPersist) Destroy() error {
 	return nil
 }
 
+const (
+	fileSuffix = ".mqtt"
+)
+
 // NewFilePersist will create a file persist method with provided
 // dirPath and strategy, if no strategy provided (nil), then the
 // default strategy will be used
 func NewFilePersist(dirPath string, strategy *PersistStrategy) *FilePersist {
 	p := &FilePersist{
-		dirPath: dirPath,
+		dirPath:  dirPath,
+		inMemBuf: &sync.Map{},
+		bytesBuf: &bytes.Buffer{},
 	}
 
 	if strategy != nil {
 		p.strategy = strategy
+	} else {
+		p.strategy = DefaultPersistStrategy()
 	}
+
+	// init file packet size
+	filepath.Walk(dirPath, func(path string, info os.FileInfo, err error) error {
+		if err != nil || info.IsDir() {
+			return filepath.SkipDir
+		}
+
+		if strings.HasSuffix(info.Name(), fileSuffix) {
+			p.n++
+		}
+		return nil
+	})
+
 	return p
 }
 
 // FilePersist is the file persist method
 type FilePersist struct {
-	dirPath  string
-	strategy *PersistStrategy
-	buf      *sync.Map // key -> string.Reader
-	bytesBuf *bytes.Buffer
-	count    uint32 // atomic persist count value
+	dirPath   string
+	inMemBuf  *sync.Map
+	inMemSize uint32
+	bytesBuf  *bytes.Buffer
+	strategy  *PersistStrategy
+	n         uint32
 }
 
 // Name of this persist method
@@ -226,6 +253,7 @@ func (m *FilePersist) Name() string {
 	if m == nil {
 		return "<nil>"
 	}
+
 	return "FilePersist"
 }
 
@@ -235,14 +263,27 @@ func (m *FilePersist) Store(key string, p Packet) error {
 		return nil
 	}
 
-	if m.strategy.MaxCount > 0 &&
-		atomic.LoadUint32(&m.count) >= m.strategy.MaxCount &&
-		m.strategy.DropOnExceed {
-		return nil
+	if m.strategy.MaxCount > 0 && m.strategy.DropOnExceed &&
+		atomic.LoadUint32(&m.n)+atomic.LoadUint32(&m.inMemSize) >= m.strategy.MaxCount {
+		// packet dropped
+		return PacketDroppedByStrategy
 	}
 
 	if !m.exists(key) || m.strategy.DuplicateReplace {
-		return m.handleStore(key, p)
+		if m.strategy.Interval > 0 {
+			// has persist interval
+			if atomic.LoadUint32(&m.inMemSize) == 0 {
+				// schedule a file save action according to the strategy
+				defer func() {
+					go m.worker()
+				}()
+			}
+			m.inMemBuf.Store(key, p)
+			atomic.AddUint32(&m.inMemSize, 1)
+		} else {
+			// persist every time
+			return m.store(key, p)
+		}
 	}
 
 	return nil
@@ -254,14 +295,41 @@ func (m *FilePersist) Load(key string) (Packet, bool) {
 		return nil, false
 	}
 
-	return nil, false
+	packet, err := m.getPacketFromFile(m.getFilename(key))
+	if err != nil {
+		return nil, false
+	}
+
+	return packet, true
 }
 
 // Range over all packet persisted
-func (m *FilePersist) Range(f func(key string, p Packet) bool) {
-	if m == nil || f == nil {
+func (m *FilePersist) Range(ranger func(key string, p Packet) bool) {
+	if m == nil || ranger == nil {
 		return
 	}
+
+	filepath.Walk(m.dirPath, func(path string, info os.FileInfo, err error) error {
+		// error happened or is dir
+		if err != nil || info.IsDir() {
+			return filepath.SkipDir
+		}
+
+		// not libmqtt packet file
+		if !strings.HasSuffix(info.Name(), fileSuffix) {
+			return nil
+		}
+
+		// decode packet
+		pkt, err := m.getPacketFromFile(path)
+		if err != nil {
+			return nil
+		}
+
+		ranger(strings.TrimSuffix(info.Name(), fileSuffix), pkt)
+
+		return nil
+	})
 }
 
 // Delete a persisted packet with key
@@ -270,7 +338,7 @@ func (m *FilePersist) Delete(key string) error {
 		return nil
 	}
 
-	return nil
+	return os.Remove(path.Join(m.dirPath, key))
 }
 
 // Destroy persist storage
@@ -278,18 +346,83 @@ func (m *FilePersist) Destroy() error {
 	if m == nil {
 		return nil
 	}
-	return nil
+
+	return os.RemoveAll(m.dirPath)
 }
 
-func (m *FilePersist) handleStore(key string, p Packet) error {
+func (m *FilePersist) getPacketFromFile(path string) (Packet, error) {
+	content, err := ioutil.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
 
-	return nil
+	packet, err := DecodeOnePacket(bytes.NewReader(content))
+	if err != nil {
+		return nil, err
+	}
+
+	return packet, nil
 }
 
 func (m *FilePersist) exists(key string) bool {
-	return false
+	_, err := os.Open(m.getFilename(key))
+	if err != nil && os.IsNotExist(err) {
+		// no such packet file
+		return false
+	}
+	return true
+}
+
+func (m *FilePersist) store(key string, p Packet) error {
+	f, err := os.Create(m.getFilename(key))
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	// write packet bytes to file
+	w := bufio.NewWriter(f)
+	err = p.WriteTo(w)
+	if err != nil {
+		println(err.Error())
+		return err
+	}
+	err = w.Flush()
+	if err != nil {
+		println(err.Error())
+		return err
+	}
+
+	atomic.AddUint32(&m.n, 1)
+	atomic.StoreUint32(&m.inMemSize, atomic.LoadUint32(&m.inMemSize)-1)
+	return nil
 }
 
 func (m *FilePersist) worker() {
+	time.Sleep(m.strategy.Interval)
 
+	persistedKeys := make([]string, 0)
+	m.inMemBuf.Range(func(key, value interface{}) bool {
+		k := key.(string)
+		p, ok := value.(Packet)
+		if !ok {
+			return true
+		}
+
+		m.store(k, p)
+		persistedKeys = append(persistedKeys, k)
+		return true
+	})
+
+	for _, k := range persistedKeys {
+		m.inMemBuf.Delete(k)
+	}
+
+	if atomic.LoadUint32(&m.inMemSize) > 0 {
+		m.worker()
+	}
+}
+
+func (m *FilePersist) getFilename(key string) string {
+	return path.Join(m.dirPath, key+fileSuffix)
 }

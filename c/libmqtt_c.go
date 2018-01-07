@@ -168,7 +168,7 @@ func Libmqtt_client_set_server(client C.int, server *C.char) {
 // Libmqtt_client_set_none_persist (int client)
 //export Libmqtt_client_set_none_persist
 func Libmqtt_client_set_none_persist(client C.int) {
-	addOption(client, mq.WithPersist(&mq.NonePersist{}))
+	addOption(client, mq.WithPersist(mq.NonePersist))
 }
 
 // Libmqtt_client_set_mem_persist (int client, int maxCount, bool dropOnExceed, bool duplicateReplace)

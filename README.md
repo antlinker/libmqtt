@@ -2,7 +2,7 @@
 
 [![Build Status](https://travis-ci.org/goiiot/libmqtt.svg)](https://travis-ci.org/goiiot/libmqtt) [![GoDoc](https://godoc.org/github.com/goiiot/libmqtt?status.svg)](https://godoc.org/github.com/goiiot/libmqtt) [![GoReportCard](https://goreportcard.com/badge/goiiot/libmqtt)](https://goreportcard.com/report/github.com/goiiot/libmqtt)
 
-Modern MQTT 3.1.1 client lib in pure Go, for `Go`, `C/C++`, `Java` and `Python`
+Feature rich modern MQTT 3.1.1 client lib in pure Go, for `Go`, `C/C++`, `Java` and `Python`
 
 ## Contents
 
@@ -17,10 +17,11 @@ Modern MQTT 3.1.1 client lib in pure Go, for `Go`, `C/C++`, `Java` and `Python`
 
 ## Features
 
-1. Full functional MQTT 3.1.1 client
+1. Feature rich MQTT 3.1.1 client
 1. HTTP server like API
 1. High performance and less memory footprint (see [Benchmark](#benchmark))
-1. Customizable TopicRouter (see [Topic Routing](#topic-routing))
+1. Customizable `TopicRouter` (see [Topic Routing](#topic-routing))
+1. Builtin multiple session persist methods (see [Session Persist](#session-persist))
 1. [C/C++ lib](./c/), [Java lib](./java/), [Python lib - TODO](./python/), [Command line client](./cmd/) support
 1. Idiomatic Go, reactive stream
 
@@ -193,12 +194,12 @@ client, err := libmqtt.NewClient(
 
 Per MQTT Specification, session state should be persisted and be recovered when next time connected to server without clean session flag set, currently we provide persist method as following:
 
-1. NonePersist - no persist
-1. MemPersist - in memory persist
-1. FilePersist - use file as persist method (TODO)
-1. RedisPersist - use redis as persist method (Available inside [github.com/goiiot/libmqtt/extension](./extension/) package)
+1. `NonePersist` - no session persist
+1. `MemPersist` - in memory session persist
+1. `FilePersist` - files session persist (with write barrier)
+1. `RedisPersist` - redis session persist (available inside [github.com/goiiot/libmqtt/extension](./extension/) package)
 
-We don't recommend `FilePersist`, use `RedisPersist` instead
+__Note__: Use `RedisPersist` if possible.
 
 ## Benchmark
 

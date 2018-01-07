@@ -326,7 +326,7 @@ func defaultClient() *client {
 		conn:    &sync.Map{},
 		idGen:   newIDGenerator(),
 		workers: &sync.WaitGroup{},
-		persist: &NonePersist{},
+		persist: NonePersist,
 	}
 }
 
@@ -394,7 +394,9 @@ func (c *client) Publish(msg ...*PublishPacket) {
 
 		if p.Qos != Qos0 && p.PacketID == 0 {
 			p.PacketID = c.idGen.next(p)
-			c.persist.Store(sendKey(p.PacketID), p)
+			if err := c.persist.Store(sendKey(p.PacketID), p); err != nil {
+				c.msgC <- newPersistMsg(err)
+			}
 		}
 		c.sendC <- p
 	}
@@ -629,7 +631,9 @@ func (c *connImpl) logic() {
 					c.parent.msgC <- newSubMsg(originSub.Topics, nil)
 					c.parent.idGen.free(p.PacketID)
 
-					c.parent.persist.Delete(sendKey(p.PacketID))
+					if err := c.parent.persist.Delete(sendKey(p.PacketID)); err != nil {
+						c.parent.msgC <- newPersistMsg(err)
+					}
 				}
 			}
 		case CtrlUnSubAck:
@@ -643,7 +647,9 @@ func (c *connImpl) logic() {
 					c.parent.msgC <- newUnSubMsg(originUnSub.TopicNames, nil)
 					c.parent.idGen.free(p.PacketID)
 
-					c.parent.persist.Delete(sendKey(p.PacketID))
+					if err := c.parent.persist.Delete(sendKey(p.PacketID)); err != nil {
+						c.parent.msgC <- newPersistMsg(err)
+					}
 				}
 			}
 		case CtrlPublish:
@@ -658,12 +664,16 @@ func (c *connImpl) logic() {
 				lg.d("NET send PubAck for Publish, id =", p.PacketID)
 				c.send(&PubAckPacket{PacketID: p.PacketID})
 
-				c.parent.persist.Store(recvKey(p.PacketID), pkt)
+				if err := c.parent.persist.Store(recvKey(p.PacketID), pkt); err != nil {
+					c.parent.msgC <- newPersistMsg(err)
+				}
 			case Qos2:
 				lg.d("NET send PubRecv for Publish, id =", p.PacketID)
 				c.send(&PubRecvPacket{PacketID: p.PacketID})
 
-				c.parent.persist.Store(recvKey(p.PacketID), pkt)
+				if err := c.parent.persist.Store(recvKey(p.PacketID), pkt); err != nil {
+					c.parent.msgC <- newPersistMsg(err)
+				}
 			}
 		case CtrlPubAck:
 			p := pkt.(*PubAckPacket)
@@ -677,7 +687,9 @@ func (c *connImpl) logic() {
 						c.parent.msgC <- newPubMsg(originPub.TopicName, nil)
 						c.parent.idGen.free(p.PacketID)
 
-						c.parent.persist.Delete(sendKey(p.PacketID))
+						if err := c.parent.persist.Delete(sendKey(p.PacketID)); err != nil {
+							c.parent.msgC <- newPersistMsg(err)
+						}
 					}
 				}
 			}
@@ -707,7 +719,9 @@ func (c *connImpl) logic() {
 						c.send(&PubCompPacket{PacketID: p.PacketID})
 						lg.d("NET send PubComp, id =", p.PacketID)
 
-						c.parent.persist.Store(recvKey(p.PacketID), pkt)
+						if err := c.parent.persist.Store(recvKey(p.PacketID), pkt); err != nil {
+							c.parent.msgC <- newPersistMsg(err)
+						}
 					}
 				}
 			}
@@ -726,7 +740,9 @@ func (c *connImpl) logic() {
 						c.parent.msgC <- newPubMsg(originPub.TopicName, nil)
 						c.parent.idGen.free(p.PacketID)
 
-						c.parent.persist.Delete(sendKey(p.PacketID))
+						if err := c.parent.persist.Delete(sendKey(p.PacketID)); err != nil {
+							c.parent.msgC <- newPersistMsg(err)
+						}
 					}
 				}
 			}
@@ -799,11 +815,17 @@ func (c *connImpl) handleLogicSend() {
 		c.connW.Flush()
 		switch logicPkt.Type() {
 		case CtrlPubRel:
-			c.parent.persist.Store(sendKey(logicPkt.(*PubRelPacket).PacketID), logicPkt)
+			if err := c.parent.persist.Store(sendKey(logicPkt.(*PubRelPacket).PacketID), logicPkt); err != nil {
+				c.parent.msgC <- newPersistMsg(err)
+			}
 		case CtrlPubAck:
-			c.parent.persist.Delete(sendKey(logicPkt.(*PubAckPacket).PacketID))
+			if err := c.parent.persist.Delete(sendKey(logicPkt.(*PubAckPacket).PacketID)); err != nil {
+				c.parent.msgC <- newPersistMsg(err)
+			}
 		case CtrlPubComp:
-			c.parent.persist.Delete(sendKey(logicPkt.(*PubCompPacket).PacketID))
+			if err := c.parent.persist.Delete(sendKey(logicPkt.(*PubCompPacket).PacketID)); err != nil {
+				c.parent.msgC <- newPersistMsg(err)
+			}
 		case CtrlDisConn:
 			// disconnect to server
 			lg.i("disconnect to server")
