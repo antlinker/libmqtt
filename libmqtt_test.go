@@ -1,7 +1,6 @@
 package libmqtt
 
 import (
-	"bufio"
 	"bytes"
 	"math"
 	"testing"
@@ -307,8 +306,7 @@ func initPing() {
 
 func testBytes(pkt Packet, target []byte, t *testing.T) {
 	buf := &bytes.Buffer{}
-	w := bufio.NewWriter(buf)
-	if err := pkt.Bytes(w); err != nil {
+	if err := pkt.WriteTo(buf); err != nil {
 		t.Log(err)
 		t.Fail()
 	}

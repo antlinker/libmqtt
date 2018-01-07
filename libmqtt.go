@@ -16,28 +16,19 @@
 
 package libmqtt
 
-import (
-	"bufio"
-)
-
 // Packet is MQTT control packet
 type Packet interface {
 	// Type return the packet type
 	Type() CtrlType
 
-	// Bytes
-	Bytes(*bufio.Writer) error
+	// WriteTo
+	WriteTo(BufferWriter) error
 }
 
 // Topic for both topic name and topic qos
 type Topic struct {
 	Name string
 	Qos  QosLevel
-}
-
-// String
-func (t *Topic) String() string {
-	return t.Name
 }
 
 const (

@@ -16,17 +16,13 @@
 
 package libmqtt
 
-import (
-	"bufio"
-)
-
 func encodeDataWithLen(data []byte) []byte {
 	l := len(data)
 	result := []byte{byte(l >> 8), byte(l)}
 	return append(result, data...)
 }
 
-func writeRemainLength(n int, w *bufio.Writer) {
+func writeRemainLength(n int, w BufferWriter) {
 	if n < 0 || n > maxMsgSize {
 		return
 	}

@@ -16,10 +16,6 @@
 
 package libmqtt
 
-import (
-	"bufio"
-)
-
 // SubscribePacket is sent from the Client to the Server
 // to create one or more Subscriptions.
 //
@@ -38,8 +34,8 @@ func (s *SubscribePacket) Type() CtrlType {
 	return CtrlSubscribe
 }
 
-// Bytes encode SubscribePacket into buffer
-func (s *SubscribePacket) Bytes(w *bufio.Writer) error {
+// WriteTo encode SubscribePacket into buffer
+func (s *SubscribePacket) WriteTo(w BufferWriter) error {
 	if w == nil || s == nil {
 		return nil
 	}
@@ -53,8 +49,8 @@ func (s *SubscribePacket) Bytes(w *bufio.Writer) error {
 	w.WriteByte(byte(s.PacketID >> 8))
 	w.WriteByte(byte(s.PacketID))
 
-	w.Write(payload)
-	return w.Flush()
+	_, err := w.Write(payload)
+	return err
 }
 
 func (s *SubscribePacket) payload() []byte {
@@ -84,8 +80,8 @@ func (s *SubAckPacket) Type() CtrlType {
 	return CtrlSubAck
 }
 
-// Bytes encode SubAckPacket into buffer
-func (s *SubAckPacket) Bytes(w *bufio.Writer) error {
+// WriteTo encode SubAckPacket into buffer
+func (s *SubAckPacket) WriteTo(w BufferWriter) error {
 	if w == nil || s == nil {
 		return nil
 	}
@@ -98,8 +94,8 @@ func (s *SubAckPacket) Bytes(w *bufio.Writer) error {
 	w.WriteByte(byte(s.PacketID >> 8))
 	w.WriteByte(byte(s.PacketID))
 	// payload
-	w.Write(payload)
-	return w.Flush()
+	_, err := w.Write(payload)
+	return err
 }
 
 func (s *SubAckPacket) payload() []byte {
@@ -118,8 +114,8 @@ func (s *UnSubPacket) Type() CtrlType {
 	return CtrlUnSub
 }
 
-// Bytes encode UnSubPacket into buffer
-func (s *UnSubPacket) Bytes(w *bufio.Writer) error {
+// WriteTo encode UnSubPacket into buffer
+func (s *UnSubPacket) WriteTo(w BufferWriter) error {
 	if w == nil || s == nil {
 		return nil
 	}
@@ -133,8 +129,8 @@ func (s *UnSubPacket) Bytes(w *bufio.Writer) error {
 	w.WriteByte(byte(s.PacketID >> 8))
 	w.WriteByte(byte(s.PacketID))
 
-	w.Write(payload)
-	return w.Flush()
+	_, err := w.Write(payload)
+	return err
 }
 
 func (s *UnSubPacket) payload() []byte {
@@ -158,8 +154,8 @@ func (s *UnSubAckPacket) Type() CtrlType {
 	return CtrlUnSubAck
 }
 
-// Bytes encode UnSubAckPacket into buffer
-func (s *UnSubAckPacket) Bytes(w *bufio.Writer) error {
+// WriteTo encode UnSubAckPacket into buffer
+func (s *UnSubAckPacket) WriteTo(w BufferWriter) error {
 	if w == nil || s == nil {
 		return nil
 	}
@@ -170,6 +166,5 @@ func (s *UnSubAckPacket) Bytes(w *bufio.Writer) error {
 	w.WriteByte(0x02)
 	// packet id
 	w.WriteByte(byte(s.PacketID >> 8))
-	w.WriteByte(byte(s.PacketID))
-	return w.Flush()
+	return w.WriteByte(byte(s.PacketID))
 }

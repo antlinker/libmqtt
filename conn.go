@@ -16,10 +16,6 @@
 
 package libmqtt
 
-import (
-	"bufio"
-)
-
 // ConnPacket is the first packet sent by Client to Server
 type ConnPacket struct {
 	protoName    string
@@ -41,8 +37,8 @@ func (c *ConnPacket) Type() CtrlType {
 	return CtrlConn
 }
 
-// Bytes encode ConnPacket to bytes
-func (c *ConnPacket) Bytes(w *bufio.Writer) error {
+// WriteTo encode ConnPacket to bytes
+func (c *ConnPacket) WriteTo(w BufferWriter) error {
 	if w == nil || c == nil {
 		return nil
 	}
@@ -68,8 +64,8 @@ func (c *ConnPacket) Bytes(w *bufio.Writer) error {
 	w.WriteByte(byte(c.Keepalive >> 8))
 	w.WriteByte(byte(c.Keepalive))
 
-	w.Write(payload)
-	return w.Flush()
+	_, err := w.Write(payload)
+	return err
 }
 
 func (c *ConnPacket) flags() byte {
@@ -137,8 +133,8 @@ func (c *ConnAckPacket) Type() CtrlType {
 	return CtrlConnAck
 }
 
-// Bytes encode ConnAckPacket to bytes
-func (c *ConnAckPacket) Bytes(w *bufio.Writer) error {
+// WriteTo encode ConnAckPacket to bytes
+func (c *ConnAckPacket) WriteTo(w BufferWriter) error {
 	if w == nil || c == nil {
 		return nil
 	}
@@ -150,8 +146,7 @@ func (c *ConnAckPacket) Bytes(w *bufio.Writer) error {
 	w.WriteByte(boolToByte(c.Present))
 
 	// response code
-	w.WriteByte(c.Code)
-	return w.Flush()
+	return w.WriteByte(c.Code)
 }
 
 var (
@@ -168,12 +163,11 @@ func (s *disConnPacket) Type() CtrlType {
 	return CtrlDisConn
 }
 
-func (s *disConnPacket) Bytes(w *bufio.Writer) error {
+func (s *disConnPacket) WriteTo(w BufferWriter) error {
 	if w == nil || s == nil {
 		return nil
 	}
 	// fixed header
 	w.WriteByte(CtrlDisConn << 4)
-	w.WriteByte(0x00)
-	return w.Flush()
+	return w.WriteByte(0x00)
 }

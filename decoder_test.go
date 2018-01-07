@@ -17,7 +17,6 @@
 package libmqtt
 
 import (
-	"bufio"
 	"bytes"
 	"testing"
 )
@@ -38,7 +37,6 @@ func TestDecodeOnePacket(t *testing.T) {
 	targetBytes := testConnWillMsgBytes
 	buf := &bytes.Buffer{}
 
-	writer := bufio.NewWriter(buf)
 	if _, err := buf.Write(targetBytes); err != nil {
 		t.Log(err)
 		t.Fail()
@@ -51,7 +49,7 @@ func TestDecodeOnePacket(t *testing.T) {
 		buf.Reset()
 		switch pkt.(type) {
 		case *ConnPacket:
-			pkt.Bytes(writer)
+			pkt.WriteTo(buf)
 			pktBytes := buf.Bytes()
 			if bytes.Compare(pktBytes, targetBytes) != 0 {
 				t.Log(pktBytes)

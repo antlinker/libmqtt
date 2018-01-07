@@ -18,15 +18,21 @@ package libmqtt
 
 import (
 	"fmt"
+	"io"
 	"math"
 	"sync"
 )
 
-func boolToByte(flag bool) (result byte) {
+type BufferWriter interface {
+	io.Writer
+	io.ByteWriter
+}
+
+func boolToByte(flag bool) byte {
 	if flag {
-		result = 0x01
+		return 1
 	}
-	return
+	return 0
 }
 
 func recvKey(packetID uint16) string {

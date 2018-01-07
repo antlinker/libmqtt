@@ -774,10 +774,10 @@ func (c *connImpl) close() {
 // handle client message send
 func (c *connImpl) handleClientSend() {
 	for pkt := range c.parent.sendC {
-		if err := pkt.Bytes(c.connW); err != nil {
+		if err := pkt.WriteTo(c.connW); err != nil {
 			break
 		}
-
+		c.connW.Flush()
 		switch pkt.Type() {
 		case CtrlPublish:
 			c.parent.msgC <- newPubMsg(pkt.(*PublishPacket).TopicName, nil)
@@ -793,9 +793,10 @@ func (c *connImpl) handleClientSend() {
 // handle mqtt logic control packet send
 func (c *connImpl) handleLogicSend() {
 	for logicPkt := range c.logicSendC {
-		if err := logicPkt.Bytes(c.connW); err != nil {
+		if err := logicPkt.WriteTo(c.connW); err != nil {
 			break
 		}
+		c.connW.Flush()
 		switch logicPkt.Type() {
 		case CtrlPubRel:
 			c.parent.persist.Store(sendKey(logicPkt.(*PubRelPacket).PacketID), logicPkt)

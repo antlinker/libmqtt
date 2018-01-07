@@ -16,10 +16,6 @@
 
 package libmqtt
 
-import (
-	"bufio"
-)
-
 // PublishPacket is sent from a Client to a Server or from Server to a Client
 // to transport an Application Message.
 type PublishPacket struct {
@@ -36,8 +32,8 @@ func (p *PublishPacket) Type() CtrlType {
 	return CtrlPublish
 }
 
-// Bytes encode PublishPacket into buffer
-func (p *PublishPacket) Bytes(w *bufio.Writer) error {
+// WriteTo encode PublishPacket into buffer
+func (p *PublishPacket) WriteTo(w BufferWriter) error {
 	if w == nil || p == nil {
 		return nil
 	}
@@ -47,8 +43,8 @@ func (p *PublishPacket) Bytes(w *bufio.Writer) error {
 	payload := p.payload()
 	writeRemainLength(len(payload), w)
 
-	w.Write(payload)
-	return w.Flush()
+	_, err := w.Write(payload)
+	return err
 }
 
 func (p *PublishPacket) payload() []byte {
@@ -69,8 +65,8 @@ func (p *PubAckPacket) Type() CtrlType {
 	return CtrlPubAck
 }
 
-// Bytes encode PubAckPacket into buffer
-func (p *PubAckPacket) Bytes(w *bufio.Writer) error {
+// WriteTo encode PubAckPacket into buffer
+func (p *PubAckPacket) WriteTo(w BufferWriter) error {
 	if w == nil || p == nil {
 		return nil
 	}
@@ -81,8 +77,7 @@ func (p *PubAckPacket) Bytes(w *bufio.Writer) error {
 	w.WriteByte(0x02)
 	// packet id
 	w.WriteByte(byte(p.PacketID >> 8))
-	w.WriteByte(byte(p.PacketID))
-	return w.Flush()
+	return w.WriteByte(byte(p.PacketID))
 }
 
 // PubRecvPacket is the response to a PublishPacket with QoS 2.
@@ -96,8 +91,8 @@ func (p *PubRecvPacket) Type() CtrlType {
 	return CtrlPubRecv
 }
 
-// Bytes encode PubRecvPacket into buffer
-func (p *PubRecvPacket) Bytes(w *bufio.Writer) error {
+// WriteTo encode PubRecvPacket into buffer
+func (p *PubRecvPacket) WriteTo(w BufferWriter) error {
 	if w == nil || p == nil {
 		return nil
 	}
@@ -108,8 +103,7 @@ func (p *PubRecvPacket) Bytes(w *bufio.Writer) error {
 	w.WriteByte(0x02)
 	// packet id
 	w.WriteByte(byte(p.PacketID >> 8))
-	w.WriteByte(byte(p.PacketID))
-	return w.Flush()
+	return w.WriteByte(byte(p.PacketID))
 }
 
 // PubRelPacket is the response to a PubRecvPacket.
@@ -123,8 +117,8 @@ func (p *PubRelPacket) Type() CtrlType {
 	return CtrlPubRel
 }
 
-// Bytes encode PubRelPacket into buffer
-func (p *PubRelPacket) Bytes(w *bufio.Writer) error {
+// WriteTo encode PubRelPacket into buffer
+func (p *PubRelPacket) WriteTo(w BufferWriter) error {
 	if w == nil || p == nil {
 		return nil
 	}
@@ -134,8 +128,7 @@ func (p *PubRelPacket) Bytes(w *bufio.Writer) error {
 	w.WriteByte(0x02)
 	// packet id
 	w.WriteByte(byte(p.PacketID >> 8))
-	w.WriteByte(byte(p.PacketID))
-	return w.Flush()
+	return w.WriteByte(byte(p.PacketID))
 }
 
 // PubCompPacket is the response to a PubRelPacket.
@@ -149,8 +142,8 @@ func (p *PubCompPacket) Type() CtrlType {
 	return CtrlPubComp
 }
 
-// Bytes encode PubCompPacket into buffer
-func (p *PubCompPacket) Bytes(w *bufio.Writer) error {
+// WriteTo encode PubCompPacket into buffer
+func (p *PubCompPacket) WriteTo(w BufferWriter) error {
 	if w == nil || p == nil {
 		return nil
 	}
@@ -160,6 +153,5 @@ func (p *PubCompPacket) Bytes(w *bufio.Writer) error {
 	w.WriteByte(0x02)
 	// packet id
 	w.WriteByte(byte(p.PacketID >> 8))
-	w.WriteByte(byte(p.PacketID))
-	return w.Flush()
+	return w.WriteByte(byte(p.PacketID))
 }
